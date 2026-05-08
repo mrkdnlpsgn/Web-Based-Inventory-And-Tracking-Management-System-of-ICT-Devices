@@ -8,6 +8,11 @@ import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import AddDeviceModal from './AddDeviceModal'
 import { formatDate } from '../../utils/helpers'
+import {
+  addDevice as addDeviceApi,
+  updateDevice as updateDeviceApi,
+  deleteDevice as deleteDeviceApi,
+} from '../../services/inventoryService'
 
 const SEARCHABLE = ['article', 'equipmentType', 'itemCode', 'model', 'serialNumber']
 
@@ -45,22 +50,50 @@ function Devices() {
     : null
 
   // ── CRUD handlers ─────────────────────────────────────────────────────────
-  const handleAdd = ({ inventoryId, device }) => {
-    dispatch(addDevice({ inventoryId, device }))
-    toast.show('Device added successfully.', 'success')
+  const handleAdd = async ({ inventoryId, device }) => {
+    try {
+      const payload = {
+        model:           device.model,
+        serialNumber:    device.serialNumber,
+        amountValue:     device.amountValue,
+        acquisitionDate: device.acquisitionDate,
+      }
+      const { data } = await addDeviceApi(inventoryId, payload)
+      dispatch(addDevice({ inventoryId, device: data }))
+      toast.show('Device added successfully.', 'success')
+    } catch {
+      toast.show('Failed to add device.', 'error')
+    }
   }
 
-  const handleUpdate = ({ inventoryId, device }) => {
-    dispatch(updateDevice({ inventoryId, device }))
-    setEditingDevice(null)
-    toast.show('Device updated successfully.', 'success')
+  const handleUpdate = async ({ inventoryId, device }) => {
+    try {
+      const payload = {
+        model:           device.model,
+        serialNumber:    device.serialNumber,
+        amountValue:     device.amountValue,
+        acquisitionDate: device.acquisitionDate,
+      }
+      const { data } = await updateDeviceApi(inventoryId, device.id, payload)
+      dispatch(updateDevice({ inventoryId, device: data }))
+      setEditingDevice(null)
+      toast.show('Device updated successfully.', 'success')
+    } catch {
+      toast.show('Failed to update device.', 'error')
+    }
   }
 
-  const handleDelete = () => {
-    const label = [deletingDevice.model, deletingDevice.serialNumber].filter(Boolean).join(' — ')
-    dispatch(removeDevice({ inventoryId: deletingDevice.inventoryId, deviceId: deletingDevice.id }))
+  const handleDelete = async () => {
+    const label     = [deletingDevice.model, deletingDevice.serialNumber].filter(Boolean).join(' — ')
+    const { inventoryId, id: deviceId } = deletingDevice
     setDeletingDevice(null)
-    toast.show(`Device "${label}" has been removed.`, 'warning')
+    try {
+      await deleteDeviceApi(inventoryId, deviceId)
+      dispatch(removeDevice({ inventoryId, deviceId }))
+      toast.show(`Device "${label}" has been removed.`, 'warning')
+    } catch {
+      toast.show('Failed to delete device.', 'error')
+    }
   }
 
   // ── Actions column ────────────────────────────────────────────────────────

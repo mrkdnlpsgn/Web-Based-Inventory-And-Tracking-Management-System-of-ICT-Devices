@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 
 const navItems = [
   {
@@ -49,7 +50,22 @@ const navItems = [
   },
 ]
 
+const adminNavItems = [
+  {
+    to: '/accounts',
+    label: 'Accounts',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-[18px] w-[18px] flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+      </svg>
+    ),
+  },
+]
+
 function Sidebar({ isCollapsed, onToggle }) {
+  const user = useSelector((s) => s.auth.user)
+  const isAdmin = user?.role === 'admin'
+
   return (
     <aside
       className={`
@@ -105,7 +121,7 @@ function Sidebar({ isCollapsed, onToggle }) {
           </p>
         )}
 
-        {navItems.map(({ to, label, icon }) => (
+        {[...navItems, ...(isAdmin ? adminNavItems : [])].map(({ to, label, icon }) => (
           <div key={to} className="relative group">
             <NavLink
               to={to}

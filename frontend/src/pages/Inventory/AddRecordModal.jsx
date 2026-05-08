@@ -80,6 +80,7 @@ const INITIAL_FORM = {
   article:           '',
   model:             '',
   serialNumber:      '',
+  deviceCount:       '',
   amountValue:       '',
   acquisitionDate:   '',
   office:            '',
@@ -163,7 +164,14 @@ function AddRecordModal({ onClose, onSave, initialData = null }) {
           article:           initialData.article           ?? '',
           model:             initialData.model             ?? '',
           serialNumber:      initialData.serialNumber      ?? '',
-          amountValue:       initialData.amountValue != null ? String(initialData.amountValue) : '',
+          deviceCount:       initialData.deviceCount != null ? String(initialData.deviceCount) : '',
+          amountValue:       (() => {
+            if (initialData.amountValue == null) return ''
+            const cnt = initialData.deviceCount
+            return cnt > 1
+              ? String(Number(initialData.amountValue) / cnt)
+              : String(initialData.amountValue)
+          })(),
           acquisitionDate:   initialData.acquisitionDate   ?? '',
           office:            initialData.office            ?? '',
           location:          initialData.location          ?? '',
@@ -196,9 +204,12 @@ function AddRecordModal({ onClose, onSave, initialData = null }) {
     if (Object.keys(errs).length) { setErrors(errs); return }
 
     setSaving(true)
+    const count     = form.deviceCount ? Number(form.deviceCount) : 0
+    const unitPrice = form.amountValue  ? Number(form.amountValue)  : 0
     const payload = {
       ...form,
-      amountValue: form.amountValue ? Number(form.amountValue) : 0,
+      deviceCount: count,
+      amountValue: count > 1 ? count * unitPrice : unitPrice,
     }
     if (isEditing) {
       await onSave({ ...initialData, ...payload })
@@ -391,7 +402,15 @@ function AddRecordModal({ onClose, onSave, initialData = null }) {
                   onChange={set('serialNumber')}
                 />
               </Field>
-              <Field label="Amount Value">
+              <Field label="Device Count">
+                <input
+                  type="number" min="0" step="1" placeholder="0"
+                  value={form.deviceCount}
+                  onChange={set('deviceCount')}
+                  className="w-full rounded-md border border-zinc-700 px-3.5 py-2.5 text-sm bg-zinc-800 text-white placeholder:text-zinc-600 hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150"
+                />
+              </Field>
+              <Field label="Unit Value (per device)">
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500 pointer-events-none select-none">₱</span>
                   <input
@@ -401,6 +420,18 @@ function AddRecordModal({ onClose, onSave, initialData = null }) {
                     className="w-full rounded-md border border-zinc-700 pl-7 pr-3.5 py-2.5 text-sm bg-zinc-800 text-white placeholder:text-zinc-600 hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150"
                   />
                 </div>
+                {(() => {
+                  const cnt  = Number(form.deviceCount) || 0
+                  const unit = Number(form.amountValue)  || 0
+                  if (cnt < 2 || unit === 0) return null
+                  const total = cnt * unit
+                  return (
+                    <p className="text-xs text-brand-400 mt-1">
+                      Total: ₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      <span className="text-zinc-600 ml-1">({cnt} × ₱{unit.toLocaleString('en-PH', { minimumFractionDigits: 2 })})</span>
+                    </p>
+                  )
+                })()}
               </Field>
               <Field label="Acquisition Date">
                 <input

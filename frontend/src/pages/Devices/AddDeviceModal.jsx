@@ -98,7 +98,7 @@ function AddDeviceModal({ onClose, onSave, initialDevice = null, inventoryItem =
       inventoryId: selectedEquip.id,
       device: isEditing
         ? { ...initialDevice, ...form, amountValue: form.amountValue ? Number(form.amountValue) : 0 }
-        : { ...form, id: crypto.randomUUID(), amountValue: form.amountValue ? Number(form.amountValue) : 0 },
+        : { ...form, amountValue: form.amountValue ? Number(form.amountValue) : 0 },
     })
     setSaving(false)
     onClose()
@@ -169,7 +169,7 @@ function AddDeviceModal({ onClose, onSave, initialDevice = null, inventoryItem =
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
                           </svg>
-                          {item.devices?.length ?? 0}
+                          {item.deviceCount ?? 0}
                         </span>
                       </td>
                     </tr>
@@ -201,6 +201,22 @@ function AddDeviceModal({ onClose, onSave, initialDevice = null, inventoryItem =
                 {[selectedEquip?.equipmentType, selectedEquip?.itemCode, selectedEquip?.office].filter(Boolean).join(' · ')}
               </p>
             </div>
+            {/* Device count badge */}
+            {(() => {
+              const count = selectedEquip?.deviceCount ?? 0
+              return (
+                <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  count === 0
+                    ? 'bg-zinc-800 text-zinc-500 ring-1 ring-zinc-700'
+                    : 'bg-brand-500/10 text-brand-400 ring-1 ring-brand-500/20'
+                }`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
+                  </svg>
+                  {count} {count === 1 ? 'device' : 'devices'}
+                </span>
+              )
+            })()}
             {!isEditing && (
               <button
                 type="button"
@@ -213,7 +229,7 @@ function AddDeviceModal({ onClose, onSave, initialDevice = null, inventoryItem =
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label="Model" required error={errors.model}>
                 <TextInput
                   placeholder="e.g. Latitude 5420"
@@ -231,6 +247,15 @@ function AddDeviceModal({ onClose, onSave, initialDevice = null, inventoryItem =
                   onFocus={() => clearError('serialNumber')}
                   error={errors.serialNumber}
                 />
+              </Field>
+              <Field label="Device Count">
+                <div className="w-full rounded-md border border-zinc-700 bg-zinc-800/40 px-3.5 py-2.5 text-sm flex items-center gap-2 cursor-default select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-500 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-semibold text-zinc-200">{selectedEquip?.deviceCount ?? 0}</span>
+                  <span className="text-zinc-500">{(selectedEquip?.deviceCount ?? 0) === 1 ? 'device' : 'devices'}</span>
+                </div>
               </Field>
             </div>
 

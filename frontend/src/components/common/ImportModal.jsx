@@ -194,13 +194,11 @@ function ImportModal({ onClose, onImport }) {
     e.target.value = ''
   }
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setStage('importing')
-    setTimeout(() => {
-      const saved = onImport(rows) // returns saved items with IDs
-      setSavedItems(saved ?? [])
-      setStage('done')
-    }, 800)
+    const saved = await onImport(rows)
+    setSavedItems(saved ?? [])
+    setStage('done')
   }
 
   const reset = () => {

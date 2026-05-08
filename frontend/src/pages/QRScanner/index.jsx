@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useSelector } from 'react-redux'
+import { useSelector, useDispatch } from 'react-redux'
 import { Html5Qrcode } from 'html5-qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
+import LogEntryModal from '../Tracking/LogEntryModal'
+import { useToast } from '../../context/ToastContext'
+import { createTrackingLog } from '../../services/trackingService'
+import { getEquipment, mockScannerReceive } from '../../services/inventoryService'
+import { setItems } from '../../store/slices/inventorySlice'
 import { formatDate } from '../../utils/helpers'
 
 const QR_PREFIX  = 'ict-inv:'
@@ -49,12 +54,28 @@ function printItemQR(item) {
 // ── Component ─────────────────────────────────────────────────────────────────
 function QRScanner() {
   const inventoryItems = useSelector((s) => s.inventory.items)
+  const dispatch       = useDispatch()
+  const { show }       = useToast()
 
-  const [scanning, setScanning]       = useState(false)
-  const [cameraError, setCameraError] = useState('')
-  const [result, setResult]           = useState(null)  // matched item
-  const [notFound, setNotFound]       = useState(false)
-  const [manualCode, setManualCode]   = useState('')
+  // Load inventory into Redux if not already populated
+  useEffect(() => {
+    if (inventoryItems.length === 0) {
+      getEquipment().then(({ data }) => dispatch(setItems(data))).catch(() => {})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [scanning, setScanning]           = useState(false)
+  const [cameraError, setCameraError]     = useState('')
+  const [result, setResult]               = useState(null)
+  const [notFound, setNotFound]           = useState(false)
+  const [manualCode, setManualCode]       = useState('')
+  const [showLogModal, setShowLogModal]   = useState(false)
+
+  // ── Mockup Handshake state ───────────────────────────────────────────────
+  const [mockCode, setMockCode]           = useState('')
+  const [mockDeviceId]                    = useState('HW-SCANNER-DEMO-01')
+  const [mockLoading, setMockLoading]     = useState(false)
+  const [mockResponse, setMockResponse]   = useState(null)
 
   const scannerRef  = useRef(null)
   const isRunning   = useRef(false)
@@ -99,7 +120,7 @@ function QRScanner() {
   const processCode = useCallback((raw) => {
     const id = raw.startsWith(QR_PREFIX) ? raw.slice(QR_PREFIX.length) : raw.trim()
     const item = inventoryItems.find(
-      (i) => i.id === id || i.itemCode?.toLowerCase() === id.toLowerCase()
+      (i) => String(i.id) === id || i.itemCode?.toLowerCase() === id.toLowerCase()
     )
     if (item) { setResult(item); setNotFound(false) }
     else       { setNotFound(true); setResult(null) }
@@ -239,6 +260,12 @@ function QRScanner() {
                   <p className="text-sm font-semibold text-zinc-300">Equipment Found</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={() => setShowLogModal(true)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Log Activity
+                  </Button>
                   <button
                     onClick={() => printItemQR(result)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors"
@@ -297,6 +324,105 @@ function QRScanner() {
           )}
         </div>
       </div>
+
+      {/* ── Mockup Handshake Panel ──────────────────────────────────────── */}
+      <div className="mt-5 bg-zinc-900 rounded-xl border border-zinc-800">
+        <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <p className="text-sm font-semibold text-zinc-300">Hardware Scanner — Mockup Handshake</p>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 font-medium">Demo Mode</span>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-zinc-500">
+            Simulates a physical barcode/QR scanner device (ID: <span className="font-mono text-zinc-400">{mockDeviceId}</span>) sending scan data directly to the Business Tier via <span className="font-mono text-zinc-400">POST /api/scanner/receive</span>. This proves the integration endpoint is architecturally ready to receive hardware input.
+          </p>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Enter item code or ict-inv:{id} — simulates hardware scan"
+              value={mockCode}
+              onChange={(e) => setMockCode(e.target.value)}
+              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3.5 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all font-mono"
+            />
+            <button
+              disabled={mockLoading || !mockCode.trim()}
+              onClick={async () => {
+                setMockLoading(true)
+                setMockResponse(null)
+                try {
+                  const { data } = await mockScannerReceive({
+                    deviceId:    mockDeviceId,
+                    rawCode:     mockCode.trim(),
+                    scannerMode: mockCode.trim().startsWith('ict-inv:') ? 'QR' : 'BARCODE',
+                  })
+                  setMockResponse(data)
+                } catch (err) {
+                  setMockResponse({ status: 'ERROR', message: err.response?.data?.message || 'Request failed.' })
+                } finally {
+                  setMockLoading(false)
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {mockLoading ? (
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2V5h1v1H5zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zm2 2v-1h1v1H5zM13 3a1 1 0 00-1 1v3a1 1 0 001 1h3a1 1 0 001-1V4a1 1 0 00-1-1h-3zm1 2v1h1V5h-1z" clipRule="evenodd" />
+                </svg>
+              )}
+              Send to Backend
+            </button>
+          </div>
+
+          {/* Response */}
+          {mockResponse && (
+            <div className={`rounded-lg border p-4 text-sm font-mono space-y-1 ${
+              mockResponse.status === 'OK'
+                ? 'bg-emerald-950/30 border-emerald-700/40'
+                : mockResponse.status === 'NOT_FOUND'
+                  ? 'bg-red-950/30 border-red-700/40'
+                  : 'bg-zinc-800 border-zinc-700'
+            }`}>
+              <p className="text-xs text-zinc-500 mb-2">Business Tier Response:</p>
+              <p>
+                <span className="text-zinc-500">status: </span>
+                <span className={
+                  mockResponse.status === 'OK' ? 'text-emerald-400 font-semibold' :
+                  mockResponse.status === 'NOT_FOUND' ? 'text-red-400 font-semibold' :
+                  'text-amber-400 font-semibold'
+                }>{mockResponse.status}</span>
+              </p>
+              <p><span className="text-zinc-500">message: </span><span className="text-zinc-300">{mockResponse.message}</span></p>
+              {mockResponse.equipment && (
+                <p><span className="text-zinc-500">equipment: </span>
+                  <span className="text-emerald-300">{mockResponse.equipment.article} ({mockResponse.equipment.itemCode})</span>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showLogModal && result && (
+        <LogEntryModal
+          initialEquipment={result}
+          onClose={() => setShowLogModal(false)}
+          onSave={async (data) => {
+            try {
+              await createTrackingLog(data)
+              show(`Updated status for ${result?.article || result?.itemCode || 'equipment'}`, 'success')
+            } catch {
+              show('Failed to save log. Please try again.', 'error')
+              throw new Error('save failed')
+            }
+          }}
+        />
+      )}
     </MainLayout>
   )
 }

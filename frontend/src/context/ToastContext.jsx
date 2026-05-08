@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 
 const ToastContext = createContext({ show: () => {} })
 
@@ -87,8 +87,10 @@ export function ToastProvider({ children }) {
     setTimeout(() => dismiss(id), duration)
   }, [dismiss])
 
+  const value = useMemo(() => ({ show }), [show])
+
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={value}>
       {children}
 
       {/* Toast container — fixed top-right, stacked */}

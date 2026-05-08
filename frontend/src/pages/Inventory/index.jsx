@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { addItem, updateItem, removeItem } from '../../store/slices/inventorySlice'
+import { addItem, updateItem, removeItem, setItems } from '../../store/slices/inventorySlice'
 import { useToast } from '../../context/ToastContext'
 import MainLayout from '../../components/layout/MainLayout'
 import Table from '../../components/common/Table'
@@ -8,7 +8,33 @@ import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import ImportModal from '../../components/common/ImportModal'
 import AddRecordModal from './AddRecordModal'
+import QRModal from './QRModal'
 import { formatDate } from '../../utils/helpers'
+import {
+  getEquipment,
+  createEquipment,
+  updateEquipment,
+  deleteEquipment,
+} from '../../services/inventoryService'
+
+// Convert various date formats from CSV/XLSX to YYYY-MM-DD (or null if blank)
+function normalizeDate(raw) {
+  if (!raw || String(raw).trim() === '') return null
+  const s = String(raw).trim()
+  // Already ISO: 2024-01-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  // MM/DD/YYYY or MM-DD-YYYY
+  const mdy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`
+  // Excel serial number (days since 1900-01-01)
+  if (/^\d+$/.test(s)) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Number(s) * 86400000)
+    return d.toISOString().slice(0, 10)
+  }
+  // Fallback: let the browser try to parse it
+  const d = new Date(s)
+  return isNaN(d) ? null : d.toISOString().slice(0, 10)
+}
 
 // ── Unified column definitions ────────────────────────────────────────────────
 const TABLE_COLUMNS = [
@@ -21,6 +47,19 @@ const TABLE_COLUMNS = [
   { key: 'model',           label: 'Model' },
   { key: 'serialNumber',    label: 'Serial Number',
     render: (r) => <span className="font-mono text-xs text-zinc-300">{r.serialNumber || '—'}</span> },
+  { key: 'deviceCount',  label: 'Device Count',
+    render: (r) => {
+      const count = r.deviceCount ?? 0
+      return count === 0
+        ? <span className="text-zinc-600 text-xs">—</span>
+        : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-500/10 text-brand-400 ring-1 ring-brand-500/20">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
+            </svg>
+            {count}
+          </span>
+    }
+  },
   { key: 'amountValue',     label: 'Amount Value',
     render: (r) => r.amountValue
       ? <span className="font-medium text-zinc-200">₱{Number(r.amountValue).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
@@ -53,36 +92,89 @@ function Inventory() {
   const [showImport, setShowImport]         = useState(false)
   const [editingRecord, setEditingRecord]   = useState(null)
   const [deletingRecord, setDeletingRecord] = useState(null)
+  const [qrItem, setQrItem]                 = useState(null)
+  const [loading, setLoading]               = useState(true)
+
+  // ── Load all equipment on mount ─────────────────────────────────────────────
+  const loadEquipment = useCallback(async () => {
+    try {
+      const { data } = await getEquipment()
+      dispatch(setItems(data))
+    } catch {
+      toast.show('Failed to load equipment records.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [dispatch, toast])
+
+  useEffect(() => { loadEquipment() }, [loadEquipment])
 
   // ── CRUD handlers ───────────────────────────────────────────────────────────
-  const handleSave = (newRecord) => {
-    const itemWithId = { ...newRecord, id: crypto.randomUUID() }
-    dispatch(addItem(itemWithId))
-    toast.show('Inventory record added.', 'success')
-    return itemWithId
+  const handleSave = async (newRecord) => {
+    try {
+      const { data } = await createEquipment(newRecord)
+      dispatch(addItem(data))
+      toast.show('Inventory record added.', 'success')
+      return data
+    } catch {
+      toast.show('Failed to add record.', 'error')
+    }
   }
 
-  const handleUpdate = (updated) => {
-    dispatch(updateItem(updated))
-    setEditingRecord(null)
-    toast.show('Inventory record updated.', 'success')
+  const handleUpdate = async (updated) => {
+    try {
+      const { data } = await updateEquipment(updated.id, updated)
+      dispatch(updateItem(data))
+      setEditingRecord(null)
+      toast.show('Inventory record updated.', 'success')
+    } catch {
+      toast.show('Failed to update record.', 'error')
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const label = deletingRecord.article || deletingRecord.itemCode
-    dispatch(removeItem(deletingRecord.id))
+    const id    = deletingRecord.id
     setDeletingRecord(null)
-    toast.show(`"${label}" has been deleted.`, 'warning')
+    try {
+      await deleteEquipment(id)
+      dispatch(removeItem(id))
+      toast.show(`"${label}" has been deleted.`, 'warning')
+    } catch {
+      toast.show('Failed to delete record.', 'error')
+    }
   }
 
-  const handleImport = (rows) => {
-    const savedItems = rows.map((r) => {
-      const item = { ...r, id: crypto.randomUUID() }
-      dispatch(addItem(item))
-      return item
-    })
-    toast.show(`${rows.length} record${rows.length !== 1 ? 's' : ''} imported successfully.`, 'success')
-    return savedItems  // returned so ImportModal can show QR codes
+  const handleImport = async (rows) => {
+    const savedItems = []
+    let failCount = 0
+
+    for (const r of rows) {
+      try {
+        // Normalize fields that come as raw strings from CSV/XLSX
+        const payload = {
+          ...r,
+          amountValue:     r.amountValue     ? Number(r.amountValue)     : null,
+          acquisitionDate: normalizeDate(r.acquisitionDate),
+        }
+        const { data } = await createEquipment(payload)
+        dispatch(addItem(data))
+        savedItems.push(data)
+      } catch (err) {
+        failCount++
+        console.error('Import row failed:', r, err?.response?.data ?? err?.message)
+      }
+    }
+
+    if (savedItems.length > 0 && failCount === 0) {
+      toast.show(`${savedItems.length} record${savedItems.length !== 1 ? 's' : ''} imported.`, 'success')
+    } else if (savedItems.length > 0) {
+      toast.show(`${savedItems.length} imported, ${failCount} failed — check the console for details.`, 'warning')
+    } else {
+      toast.show(`Import failed — ${failCount} row${failCount !== 1 ? 's' : ''} could not be saved. Check the console.`, 'error')
+    }
+
+    return savedItems
   }
 
   // ── Filtered data ───────────────────────────────────────────────────────────
@@ -105,6 +197,15 @@ function Inventory() {
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => setQrItem(row)}
+          title="Show QR code"
+          className="p-1.5 rounded-md text-zinc-500 hover:text-brand-400 hover:bg-brand-500/10 transition-all duration-150 active:scale-95"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2V5h1v1H5zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zm2 2v-1h1v1H5zM13 3a1 1 0 00-1 1v3a1 1 0 001 1h3a1 1 0 001-1V4a1 1 0 00-1-1h-3zm1 2v1h1V5h-1zM11 7a1 1 0 112 0v1h1a1 1 0 110 2h-2a1 1 0 01-1-1V7zM7 11a1 1 0 100 2h1v1a1 1 0 102 0v-2a1 1 0 00-1-1H7zM13 11a1 1 0 100 2h.01a1 1 0 100-2H13zM15 13a1 1 0 100 2h.01a1 1 0 100-2H15zM13 15a1 1 0 100 2h.01a1 1 0 100-2H13z" clipRule="evenodd" />
           </svg>
         </button>
         <button
@@ -158,7 +259,7 @@ function Inventory() {
         <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <p className="text-sm font-semibold text-zinc-300">Equipment &amp; Device List</p>
-            {records.length > 0 && (
+            {!loading && records.length > 0 && (
               <span className="text-xs font-medium text-zinc-400 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full">
                 {filtered.length}{filtered.length !== records.length && ` of ${records.length}`} record{records.length !== 1 ? 's' : ''}
               </span>
@@ -166,7 +267,17 @@ function Inventory() {
           </div>
         </div>
         <div className="p-4">
-          <Table columns={[...TABLE_COLUMNS, actionsColumn]} data={filtered} />
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-zinc-600 gap-2">
+              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+              <span className="text-sm">Loading records…</span>
+            </div>
+          ) : (
+            <Table columns={[...TABLE_COLUMNS, actionsColumn]} data={filtered} />
+          )}
         </div>
       </div>
 
@@ -174,6 +285,7 @@ function Inventory() {
       {showAdd       && <AddRecordModal onClose={() => setShowAdd(false)}             onSave={handleSave}   />}
       {editingRecord && <AddRecordModal onClose={() => setEditingRecord(null)} initialData={editingRecord} onSave={handleUpdate} />}
       {showImport    && <ImportModal    onClose={() => setShowImport(false)}           onImport={handleImport} />}
+      {qrItem        && <QRModal        onClose={() => setQrItem(null)}               item={qrItem} />}
 
       {deletingRecord && (
         <ConfirmDialog
