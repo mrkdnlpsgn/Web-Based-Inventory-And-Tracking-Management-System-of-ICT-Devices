@@ -16,7 +16,7 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
     recommendedMethod:  initial?.recommendedMethod   || 'DESTRUCTION',
     disposalStatus:     initial?.disposalStatus      || 'PENDING',
     inspectionDate:     initial?.inspectionDate      || '',
-    approvedById:       initial?.approvedBy?.id      ? String(initial.approvedBy.id) : '',
+    approvedBy:         initial?.approvedBy           || '',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -44,7 +44,7 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
         recommendedMethod:  form.recommendedMethod,
         disposalStatus:     form.disposalStatus,
         inspectionDate:     form.inspectionDate,
-        approvedById:       form.approvedById ? Number(form.approvedById) : null,
+        approvedBy:         form.approvedBy.trim() || null,
       }
       await onSave(payload)
       onClose()
@@ -115,13 +115,7 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Approved By <span className="text-slate-400 font-normal">(optional)</span></label>
-            <div className="relative">
-              <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.approvedById} onChange={set('approvedById')}>
-                <option value="">— None —</option>
-                {users.map((u) => <option key={u.id} value={String(u.id)}>{u.fullName || u.username}</option>)}
-              </select>
-              <Chevron />
-            </div>
+            <input className={INPUT_CLASS} placeholder="Full name of approving authority" value={form.approvedBy} onChange={set('approvedBy')} />
           </div>
         </div>
 

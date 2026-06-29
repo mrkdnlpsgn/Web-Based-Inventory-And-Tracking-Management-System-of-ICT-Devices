@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useToast } from '../../context/ToastContext'
+import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -72,10 +73,12 @@ function Categories() {
   const [editing, setEditing]       = useState(null)
   const [deleting, setDeleting]     = useState(null)
 
-  const load = useCallback(async () => {
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchCategories = useCallback(async (q = '') => {
     setLoading(true)
     try {
-      const { data } = await getCategories()
+      const { data } = await getCategories(q)
       setCategories(data)
     } catch {
       toast.show('Failed to load categories.', 'error')
@@ -84,7 +87,7 @@ function Categories() {
     }
   }, [toast])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { fetchCategories(debouncedSearch) }, [debouncedSearch, fetchCategories])
 
   const handleCreate = async (payload) => {
     const { data } = await createCategory(payload)
@@ -110,9 +113,7 @@ function Categories() {
     }
   }
 
-  const filtered = categories.filter((c) =>
-    !search.trim() || c.categoryName.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = categories
 
   return (
     <MainLayout>
@@ -137,7 +138,7 @@ function Categories() {
           <p className="text-sm font-semibold text-slate-700 dark:text-zinc-300">All Categories</p>
           {!loading && (
             <span className="text-xs font-medium text-slate-500 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 px-2 py-0.5 rounded-full">
-              {filtered.length}{filtered.length !== categories.length ? ` of ${categories.length}` : ''} categor{categories.length !== 1 ? 'ies' : 'y'}
+              {filtered.length} categor{filtered.length !== 1 ? 'ies' : 'y'}
             </span>
           )}
         </div>

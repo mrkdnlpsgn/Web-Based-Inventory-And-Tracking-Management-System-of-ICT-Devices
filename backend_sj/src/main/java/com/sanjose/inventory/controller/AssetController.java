@@ -18,7 +18,7 @@ public class AssetController {
     private final AssetService assetService;
 
     @GetMapping
-    public List<Asset> getAll() { return assetService.findAll(); }
+    public List<Asset> getAll(@RequestParam(required = false) String search) { return assetService.findAll(search); }
 
     @GetMapping("/{id}")
     public Asset getById(@PathVariable Long id) { return assetService.findById(id); }

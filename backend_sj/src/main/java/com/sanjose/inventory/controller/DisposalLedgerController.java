@@ -18,7 +18,7 @@ public class DisposalLedgerController {
     private final DisposalLedgerService disposalLedgerService;
 
     @GetMapping
-    public List<DisposalLedger> getAll() { return disposalLedgerService.findAll(); }
+    public List<DisposalLedger> getAll(@RequestParam(required = false) String search) { return disposalLedgerService.findAll(search); }
 
     @GetMapping("/{id}")
     public DisposalLedger getById(@PathVariable Long id) {

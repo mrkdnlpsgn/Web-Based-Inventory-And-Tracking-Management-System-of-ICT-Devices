@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useToast } from '../../context/ToastContext'
+import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -48,6 +49,8 @@ function Maintenance() {
   const [deleting, setDeleting] = useState(null)
   const [page, setPage]         = useState(1)
 
+  const debouncedSearch = useDebounce(search, 300)
+
   // Pre-filter by assetId URL param
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -55,17 +58,11 @@ function Maintenance() {
     if (assetId) setAssetFilter(assetId)
   }, [location.search])
 
-  const load = useCallback(async () => {
+  const fetchRecords = useCallback(async (q = '') => {
     setLoading(true)
     try {
-      const [maintRes, assetRes, userRes] = await Promise.all([
-        getMaintenance().catch(() => ({ data: [] })),
-        getAssets().catch(() => ({ data: [] })),
-        getUsers().catch(() => ({ data: [] })),
-      ])
-      setRecords(maintRes.data)
-      setAssets(assetRes.data)
-      setUsers(userRes.data)
+      const { data } = await getMaintenance(q)
+      setRecords(data)
     } catch {
       toast.show('Failed to load maintenance records.', 'error')
     } finally {
@@ -73,8 +70,19 @@ function Maintenance() {
     }
   }, [toast])
 
-  useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(1) }, [search, filterStatus, filterType, assetFilter])
+  const load = useCallback(async () => {
+    Promise.all([getAssets().catch(() => ({ data: [] })), getUsers().catch(() => ({ data: [] }))])
+      .then(([assetRes, userRes]) => { setAssets(assetRes.data); setUsers(userRes.data) })
+    fetchRecords(search)
+  }, [fetchRecords, search]) // eslint-disable-line
+
+  useEffect(() => {
+    Promise.all([getAssets().catch(() => ({ data: [] })), getUsers().catch(() => ({ data: [] }))])
+      .then(([assetRes, userRes]) => { setAssets(assetRes.data); setUsers(userRes.data) })
+  }, [])
+
+  useEffect(() => { fetchRecords(debouncedSearch) }, [debouncedSearch, fetchRecords])
+  useEffect(() => { setPage(1) }, [debouncedSearch, filterStatus, filterType, assetFilter])
 
   const handleCreate = async (payload) => {
     const { data } = await createMaintenance(payload)
@@ -106,17 +114,9 @@ function Maintenance() {
       if (filterStatus && r.status !== filterStatus) return false
       if (filterType && r.maintenanceType !== filterType) return false
       if (assetFilter && String(r.asset?.id) !== assetFilter) return false
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        return (
-          r.asset?.propertyNumber?.toLowerCase().includes(q) ||
-          r.asset?.description?.toLowerCase().includes(q) ||
-          r.findings?.toLowerCase().includes(q)
-        )
-      }
       return true
     })
-  }, [records, search, filterStatus, filterType, assetFilter])
+  }, [records, filterStatus, filterType, assetFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

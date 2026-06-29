@@ -2,7 +2,11 @@
 -- San Jose GSO: Enterprise Asset Management System
 -- Database Schema — MySQL DDL Script
 
+	
 -- =============================================================
+
+CREATE DATABASE IF NOT EXISTS sjgsoinventory;
+USE sjgsoinventory;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -24,17 +28,19 @@ CREATE TABLE offices (
 -- TABLE: users
 -- =============================================================
 CREATE TABLE users (
-    user_id         INT             NOT NULL AUTO_INCREMENT,
-    username        VARCHAR(50)     NOT NULL,
-    password_hash   VARCHAR(255)    NOT NULL COMMENT 'BCrypt-hashed password',
-    full_name       VARCHAR(100)    NOT NULL,
-    `role`          ENUM(
-                        'ADMIN',
-                        'STAFF'
-                    )               NOT NULL,
-    office_id       INT             NULL,
-    is_active       BOOLEAN         NOT NULL DEFAULT TRUE,
-    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id                 INT             NOT NULL AUTO_INCREMENT,
+    username                VARCHAR(50)     NOT NULL,
+    password_hash           VARCHAR(255)    NOT NULL COMMENT 'BCrypt-hashed password',
+    full_name               VARCHAR(100)    NOT NULL,
+    `role`                  ENUM(
+                                'ADMIN',
+                                'STAFF'
+                            )               NOT NULL,
+    office_id               INT             NULL,
+    is_active               BOOLEAN         NOT NULL DEFAULT TRUE,
+    failed_login_attempts   INT             NOT NULL DEFAULT 0,
+    account_locked_until    DATETIME        NULL,
+    created_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_users         PRIMARY KEY (user_id),
     CONSTRAINT uq_users_uname   UNIQUE (username),
@@ -75,8 +81,9 @@ CREATE TABLE assets (
     quantity                INT             NOT NULL DEFAULT 1,
     acquisition_date        DATE            NOT NULL,
     unit_value              DECIMAL(12,2)   NOT NULL COMMENT 'Acquisition unit value in PHP',
-    office_id               INT             NOT NULL COMMENT 'Currently assigned office',
-    accountable_person_id   INT             NOT NULL COMMENT 'User accountable for this asset',
+    office_id               INT             NOT NULL COMMENT 'Currently assigned office / location',
+    accountable_person      VARCHAR(150)    NULL    COMMENT 'Name of person accountable for this asset',
+    physical_count          INT             NULL    COMMENT 'Actual count during physical inventory; NULL if not yet counted',
     location                VARCHAR(150)    NOT NULL COMMENT 'Physical location of the asset',
     `condition`             ENUM(
                                 'SERVICEABLE',
@@ -114,10 +121,6 @@ CREATE TABLE assets (
         ON DELETE RESTRICT,
     CONSTRAINT fk_assets_office     FOREIGN KEY (office_id)
         REFERENCES offices (office_id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_assets_person     FOREIGN KEY (accountable_person_id)
-        REFERENCES users (user_id)
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
     CONSTRAINT fk_assets_deleted_by FOREIGN KEY (deleted_by)
@@ -178,7 +181,7 @@ CREATE TABLE maintenance_ledger (
                         )               NOT NULL,
     findings            TEXT            NOT NULL,
     actions_taken       TEXT            NOT NULL,
-    assigned_to         INT             NULL COMMENT 'Technician or responsible user',
+    assigned_to         VARCHAR(150)    NULL COMMENT 'Name of technician or responsible person',
     maintenance_date    DATE            NOT NULL,
     cost                DECIMAL(10,2)   NULL COMMENT 'Cost in PHP; NULL if no cost incurred',
     status              ENUM(
@@ -200,10 +203,6 @@ CREATE TABLE maintenance_ledger (
         REFERENCES assets (asset_id)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
-    CONSTRAINT fk_ml_assigned_to        FOREIGN KEY (assigned_to)
-        REFERENCES users (user_id)
-        ON UPDATE CASCADE
-        ON DELETE SET NULL,
     CONSTRAINT fk_ml_recorded_by        FOREIGN KEY (recorded_by)
         REFERENCES users (user_id)
         ON UPDATE CASCADE
@@ -234,7 +233,7 @@ CREATE TABLE disposal_ledger (
                                 'COMPLETED'
                             )       NOT NULL DEFAULT 'PENDING',
     inspection_date         DATE    NOT NULL,
-    approved_by             INT     NULL COMMENT 'Approving authority',
+    approved_by             VARCHAR(150) NULL COMMENT 'Name of approving authority',
     recorded_by             INT     NOT NULL,
     is_deleted              BOOLEAN NOT NULL DEFAULT FALSE
                             COMMENT 'Soft delete flag',
@@ -249,10 +248,6 @@ CREATE TABLE disposal_ledger (
         REFERENCES assets (asset_id)
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
-    CONSTRAINT fk_dl_approved_by        FOREIGN KEY (approved_by)
-        REFERENCES users (user_id)
-        ON UPDATE CASCADE
-        ON DELETE SET NULL,
     CONSTRAINT fk_dl_recorded_by        FOREIGN KEY (recorded_by)
         REFERENCES users (user_id)
         ON UPDATE CASCADE
@@ -338,8 +333,7 @@ CREATE TABLE deleted_assets (
     unit_value              DECIMAL(12,2)   NOT NULL,
     office_id               INT             NOT NULL,
     office_name             VARCHAR(100)    NOT NULL COMMENT 'Snapshot of office name at deletion',
-    accountable_person_id   INT             NOT NULL,
-    accountable_person_name VARCHAR(100)    NOT NULL COMMENT 'Snapshot of accountable person name',
+    accountable_person_name VARCHAR(150)    NOT NULL COMMENT 'Snapshot of accountable person name',
     location                VARCHAR(150)    NOT NULL,
     `condition`             ENUM(
                                 'SERVICEABLE',
@@ -484,7 +478,7 @@ CREATE INDEX idx_assets_category       ON assets (category_id);
 CREATE INDEX idx_assets_office         ON assets (office_id);
 CREATE INDEX idx_assets_condition      ON assets (`condition`);
 CREATE INDEX idx_assets_lifecycle      ON assets (lifecycle_status);
-CREATE INDEX idx_assets_accountable    ON assets (accountable_person_id);
+CREATE INDEX idx_assets_accountable    ON assets (accountable_person);
 CREATE INDEX idx_assets_is_deleted     ON assets (is_deleted);      -- exclude deleted rows efficiently
 
 -- asset_history: lookups per asset
@@ -512,6 +506,44 @@ CREATE INDEX idx_al_module             ON audit_logs (module);
 CREATE INDEX idx_al_logged_at          ON audit_logs (logged_at);
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- =============================================================
+-- DEFAULT SEED DATA
+-- =============================================================
+
+-- Default offices
+INSERT INTO offices (office_name) VALUES
+  ('Office of the Mayor'),
+  ('Office of the Vice Mayor'),
+  ('Sangguniang Bayan Office'),
+  ('Human Resource Management Office'),
+  ('Budget Office'),
+  ('Accounting Office'),
+  ('Treasury Office'),
+  ('Assessor\'s Office'),
+  ('Civil Registrar\'s Office'),
+  ('Municipal Engineering Office'),
+  ('Municipal Planning and Development Office'),
+  ('Municipal Health Office'),
+  ('Municipal Social Welfare and Development Office'),
+  ('Municipal Agriculture Office'),
+  ('General Services Office'),
+  ('Information and Communications Technology Office'),
+  ('Disaster Risk Reduction and Management Office')
+ON DUPLICATE KEY UPDATE office_name = VALUES(office_name);
+
+-- Default user accounts (BCrypt cost=10 hashed passwords)
+-- admin / admin123
+-- ict_staff / ict2024
+INSERT INTO users (username, password_hash, full_name, `role`, is_active)
+VALUES
+  ('admin',     '$2a$10$HX3mXMSxuwtsps2HvhHKoO3pg1P6i.otAJrRaK03mB9lSSkjIc50a', 'Administrator', 'ADMIN', TRUE),
+  ('ict_staff', '$2a$10$/yz1ylkBTggXuOMJBUCsqO72r.yJ3N8gFfAei64BMRexq5huYAmWG', 'ICT Officer',   'STAFF', TRUE)
+ON DUPLICATE KEY UPDATE
+  password_hash = VALUES(password_hash),
+  full_name     = VALUES(full_name),
+  `role`        = VALUES(`role`),
+  is_active     = TRUE;
 
 -- =============================================================
 -- END OF SCHEMA

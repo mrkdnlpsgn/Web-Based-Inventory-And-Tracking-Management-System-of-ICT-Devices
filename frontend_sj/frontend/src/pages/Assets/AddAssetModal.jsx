@@ -5,7 +5,6 @@ import { createCategory } from '../../services/categoryService'
 
 const PREDEFINED_CATEGORIES = ['Appliances', 'Vehicle', 'Office Supplies']
 const CONDITIONS  = ['SERVICEABLE', 'REPAIRABLE', 'UNSERVICEABLE']
-const LIFECYCLES  = ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'UNDER_MAINTENANCE', 'DISPOSED', 'ARCHIVED']
 const INPUT_CLASS = 'w-full rounded-md border border-slate-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150'
 
 export default function AddAssetModal({ onClose, onSave, initial = null, categories = [], offices = [], onCategoryCreated }) {
@@ -20,6 +19,7 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
     unitValue:        initial?.unitValue            ?? '',
     officeId:         initial?.office?.id           ? String(initial.office.id) : '',
     accountablePerson: initial?.accountablePerson   || '',
+    physicalCount:    initial?.physicalCount         ?? '',
     location:         initial?.location             || '',
     condition:        initial?.condition            || 'SERVICEABLE',
     lifecycleStatus:  initial?.lifecycleStatus      || 'REGISTERED',
@@ -82,9 +82,9 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
     if (!form.propertyNumber.trim())   e.propertyNumber   = 'Property number is required.'
     if (!form.description.trim())      e.description      = 'Description is required.'
     if (!form.categoryId)              e.categoryId       = 'Category is required.'
-    if (!form.officeId)                e.officeId         = 'Office is required.'
+    if (!form.officeId)                e.officeId         = 'Location is required.'
     if (!form.accountablePerson.trim()) e.accountablePerson = 'Accountable person is required.'
-    if (!form.location.trim())         e.location         = 'Location is required.'
+    if (form.physicalCount === '' || form.physicalCount == null) e.physicalCount = 'Physical count is required.'
     if (!form.acquisitionDate)         e.acquisitionDate  = 'Acquisition date is required.'
     if (!form.unitValue && form.unitValue !== 0) e.unitValue = 'Unit value is required.'
     return e
@@ -105,6 +105,7 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
         resolvedCategoryId = newCat.id
       }
 
+      const selectedOfficeName = offices.find((o) => String(o.id) === String(form.officeId))?.officeName || ''
       const payload = {
         propertyNumber:    form.propertyNumber.trim(),
         description:       form.description.trim(),
@@ -114,7 +115,8 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
         unitValue:         Number(form.unitValue),
         officeId:          Number(form.officeId),
         accountablePerson: form.accountablePerson.trim(),
-        location:          form.location.trim(),
+        physicalCount:     form.physicalCount !== '' ? Number(form.physicalCount) : null,
+        location:          selectedOfficeName,
         condition:         form.condition,
         lifecycleStatus:   form.lifecycleStatus,
         remarks:           form.remarks.trim() || null,
@@ -206,11 +208,16 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
           {errors.description && <p className="text-xs text-red-400">{errors.description}</p>}
         </div>
 
-        {/* Qty + Acq Date + Unit Value */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Qty + Physical Count + Acq Date + Unit Value */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Quantity</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Qty (Property Card)</label>
             <input type="number" min="1" className={INPUT_CLASS} value={form.quantity} onChange={set('quantity')} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Qty (Physical Count)<span className="text-red-400 ml-0.5">*</span></label>
+            <input type="number" min="0" className={INPUT_CLASS} placeholder="0" value={form.physicalCount} onChange={set('physicalCount')} />
+            {errors.physicalCount && <p className="text-xs text-red-400">{errors.physicalCount}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Acquisition Date<span className="text-red-400 ml-0.5">*</span></label>
@@ -224,13 +231,13 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
           </div>
         </div>
 
-        {/* Office + Accountable Person */}
+        {/* Location + Accountable Person */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Office<span className="text-red-400 ml-0.5">*</span></label>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Location<span className="text-red-400 ml-0.5">*</span></label>
             <div className="relative">
               <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.officeId} onChange={set('officeId')}>
-                <option value="">— Select office —</option>
+                <option value="">— Select location —</option>
                 {offices.map((o) => <option key={o.id} value={String(o.id)}>{o.officeName}</option>)}
               </select>
               <ChevronIcon />
@@ -249,32 +256,14 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
           </div>
         </div>
 
-        {/* Location */}
+        {/* Condition */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Location<span className="text-red-400 ml-0.5">*</span></label>
-          <input className={INPUT_CLASS} placeholder="Physical location of the asset" value={form.location} onChange={set('location')} />
-          {errors.location && <p className="text-xs text-red-400">{errors.location}</p>}
-        </div>
-
-        {/* Condition + Lifecycle */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Condition<span className="text-red-400 ml-0.5">*</span></label>
-            <div className="relative">
-              <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.condition} onChange={set('condition')}>
-                {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <ChevronIcon />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Lifecycle Status<span className="text-red-400 ml-0.5">*</span></label>
-            <div className="relative">
-              <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.lifecycleStatus} onChange={set('lifecycleStatus')}>
-                {LIFECYCLES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-              </select>
-              <ChevronIcon />
-            </div>
+          <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Condition<span className="text-red-400 ml-0.5">*</span></label>
+          <div className="relative">
+            <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.condition} onChange={set('condition')}>
+              {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <ChevronIcon />
           </div>
         </div>
 

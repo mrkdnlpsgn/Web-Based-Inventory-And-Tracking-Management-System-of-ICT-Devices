@@ -20,7 +20,7 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    public List<UserResponse> getAll() { return userService.findAll(); }
+    public List<UserResponse> getAll(@RequestParam(required = false) String search) { return userService.findAll(search); }
 
     @GetMapping("/{id}")
     public UserResponse getById(@PathVariable Long id) { return userService.findById(id); }

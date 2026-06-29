@@ -45,10 +45,8 @@ public class DisposalLedger {
     @Column(name = "inspection_date", nullable = false)
     private LocalDate inspectionDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approved_by")
-    @JsonIgnoreProperties({"password", "office", "failedLoginAttempts", "accountLockedUntil"})
-    private User approvedBy;
+    @Column(name = "approved_by", length = 150)
+    private String approvedBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recorded_by", nullable = false)

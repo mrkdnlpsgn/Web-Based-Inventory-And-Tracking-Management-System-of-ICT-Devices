@@ -17,7 +17,7 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @GetMapping
-    public List<Category> getAll() { return categoryService.findAll(); }
+    public List<Category> getAll(@RequestParam(required = false) String search) { return categoryService.findAll(search); }
 
     @GetMapping("/{id}")
     public Category getById(@PathVariable Long id) { return categoryService.findById(id); }

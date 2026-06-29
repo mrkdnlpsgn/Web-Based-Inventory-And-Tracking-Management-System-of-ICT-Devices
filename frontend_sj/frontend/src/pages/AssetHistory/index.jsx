@@ -7,6 +7,7 @@ import { getAssetHistory, createAssetHistory } from '../../services/assetHistory
 import { getAssets } from '../../services/assetService'
 import { getUsers } from '../../services/userService'
 import { getOffices } from '../../services/officeService'
+import { useDebounce } from '../../hooks/useDebounce'
 
 const EVENT_TYPES = ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'MAINTENANCE', 'DISPOSAL', 'ARCHIVED']
 
@@ -165,19 +166,13 @@ function AssetHistory() {
   const [showAdd, setShowAdd]     = useState(false)
   const [page, setPage]           = useState(1)
 
-  const load = useCallback(async () => {
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchHistory = useCallback(async (q = '') => {
     setLoading(true)
     try {
-      const [histRes, assetRes, userRes, officeRes] = await Promise.all([
-        getAssetHistory().catch(() => ({ data: [] })),
-        getAssets().catch(() => ({ data: [] })),
-        getUsers().catch(() => ({ data: [] })),
-        getOffices().catch(() => ({ data: [] })),
-      ])
-      setHistory(histRes.data)
-      setAssets(assetRes.data)
-      setUsers(userRes.data)
-      setOffices(officeRes.data)
+      const { data } = await getAssetHistory(q)
+      setHistory(data)
     } catch {
       toast.show('Failed to load asset history.', 'error')
     } finally {
@@ -185,8 +180,29 @@ function AssetHistory() {
     }
   }, [toast])
 
-  useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(1) }, [search, filterType, dateFilter])
+  const load = useCallback(() => {
+    Promise.all([
+      getAssets().catch(() => ({ data: [] })),
+      getUsers().catch(() => ({ data: [] })),
+      getOffices().catch(() => ({ data: [] })),
+    ]).then(([assetRes, userRes, officeRes]) => {
+      setAssets(assetRes.data); setUsers(userRes.data); setOffices(officeRes.data)
+    })
+    fetchHistory(search)
+  }, [fetchHistory, search]) // eslint-disable-line
+
+  useEffect(() => {
+    Promise.all([
+      getAssets().catch(() => ({ data: [] })),
+      getUsers().catch(() => ({ data: [] })),
+      getOffices().catch(() => ({ data: [] })),
+    ]).then(([assetRes, userRes, officeRes]) => {
+      setAssets(assetRes.data); setUsers(userRes.data); setOffices(officeRes.data)
+    })
+  }, [])
+
+  useEffect(() => { fetchHistory(debouncedSearch) }, [debouncedSearch, fetchHistory])
+  useEffect(() => { setPage(1) }, [debouncedSearch, filterType, dateFilter])
 
   const handleLogEvent = async (payload) => {
     const { data } = await createAssetHistory(payload)
@@ -207,19 +223,9 @@ function AssetHistory() {
       } else if (dateFilter === '30d') {
         if (now - new Date(h.eventDate || h.createdAt).getTime() > 30 * 86400000) return false
       }
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        return (
-          h.asset?.propertyNumber?.toLowerCase().includes(q) ||
-          h.asset?.description?.toLowerCase().includes(q) ||
-          h.eventType?.toLowerCase().includes(q) ||
-          h.performedBy?.fullName?.toLowerCase().includes(q) ||
-          h.performedBy?.username?.toLowerCase().includes(q)
-        )
-      }
       return true
     })
-  }, [history, search, filterType, dateFilter, now])
+  }, [history, filterType, dateFilter, now])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

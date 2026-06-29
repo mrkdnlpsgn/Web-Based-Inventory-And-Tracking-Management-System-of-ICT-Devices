@@ -1,15 +1,20 @@
 package com.sanjose.inventory.service;
 
+import com.sanjose.inventory.config.SpHelper;
 import com.sanjose.inventory.dto.DisposalLedgerRequest;
-import com.sanjose.inventory.entity.*;
+import com.sanjose.inventory.entity.Asset;
+import com.sanjose.inventory.entity.DisposalLedger;
+import com.sanjose.inventory.entity.User;
 import com.sanjose.inventory.exception.ResourceNotFoundException;
-import com.sanjose.inventory.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.List;
 
 @Service
@@ -17,105 +22,117 @@ import java.util.List;
 @Transactional
 public class DisposalLedgerService {
 
-    private final DisposalLedgerRepository disposalLedgerRepository;
-    private final DeletedDisposalRepository deletedDisposalRepository;
-    private final AssetRepository assetRepository;
-    private final UserRepository userRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
 
-    public List<DisposalLedger> findAll() {
-        return disposalLedgerRepository.findByIsDeletedFalse();
+    private static final RowMapper<DisposalLedger> DISPOSAL_MAPPER = (rs, rn) -> {
+        DisposalLedger d = new DisposalLedger();
+        d.setId(rs.getLong("id"));
+        d.setReason(rs.getString("reason"));
+        d.setInspectionFindings(rs.getString("inspectionFindings"));
+        String method = rs.getString("recommendedMethod");
+        d.setRecommendedMethod(method != null ? DisposalLedger.DisposalMethod.valueOf(method) : null);
+        String status = rs.getString("disposalStatus");
+        d.setDisposalStatus(status != null ? DisposalLedger.DisposalStatus.valueOf(status) : null);
+        Date inspDate = rs.getDate("inspectionDate");
+        d.setInspectionDate(inspDate != null ? inspDate.toLocalDate() : null);
+        Timestamp createdTs = rs.getTimestamp("createdAt");
+        d.setCreatedAt(createdTs != null ? createdTs.toLocalDateTime() : null);
+
+        Long assetId = rs.getObject("asset_id", Long.class);
+        if (assetId != null) {
+            Asset a = new Asset();
+            a.setId(assetId);
+            a.setPropertyNumber(rs.getString("asset_propertyNumber"));
+            a.setDescription(rs.getString("asset_description"));
+            d.setAsset(a);
+        }
+
+        Long rbId = rs.getObject("rb_id", Long.class);
+        if (rbId != null) {
+            User rb = new User();
+            rb.setId(rbId);
+            rb.setUsername(rs.getString("rb_username"));
+            rb.setFullName(rs.getString("rb_fullName"));
+            d.setRecordedBy(rb);
+        }
+
+        d.setApprovedBy(rs.getString("approvedBy"));
+
+        return d;
+    };
+
+    public List<DisposalLedger> findAll(String search) {
+        if (search != null && !search.isBlank()) {
+            return jdbcTemplate.query("CALL sp_disposal_search(?)", DISPOSAL_MAPPER, search.trim());
+        }
+        return jdbcTemplate.query("CALL sp_disposal_get_all()", DISPOSAL_MAPPER);
     }
 
     public List<DisposalLedger> findByAsset(Long assetId) {
-        return disposalLedgerRepository.findByAsset_IdAndIsDeletedFalse(assetId);
+        return jdbcTemplate.query("CALL sp_disposal_get_by_asset(?)", DISPOSAL_MAPPER, assetId);
     }
 
     public DisposalLedger findById(Long id) {
-        return disposalLedgerRepository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Disposal record not found: " + id));
+        List<DisposalLedger> list = jdbcTemplate.query(
+            "CALL sp_disposal_get_by_id(?)", DISPOSAL_MAPPER, id);
+        if (list.isEmpty()) throw new ResourceNotFoundException("Disposal record not found: " + id);
+        return list.get(0);
     }
 
     public DisposalLedger create(DisposalLedgerRequest req) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User recorder = userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
-        Asset asset = assetRepository.findByIdAndIsDeletedFalse(req.getAssetId())
-                .orElseThrow(() -> new ResourceNotFoundException("Asset not found: " + req.getAssetId()));
+        Long recorderId = getUserIdByUsername(username);
 
-        DisposalLedger d = DisposalLedger.builder()
-                .asset(asset)
-                .reason(req.getReason())
-                .inspectionFindings(req.getInspectionFindings())
-                .recommendedMethod(DisposalLedger.DisposalMethod.valueOf(req.getRecommendedMethod()))
-                .disposalStatus(req.getDisposalStatus() != null
-                        ? DisposalLedger.DisposalStatus.valueOf(req.getDisposalStatus())
-                        : DisposalLedger.DisposalStatus.PENDING)
-                .inspectionDate(req.getInspectionDate())
-                .recordedBy(recorder)
-                .build();
+        Long newId = SpHelper.callWithOutLong(jdbcTemplate,
+            "CALL sp_disposal_create(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            req.getAssetId(),
+            req.getReason(),
+            req.getInspectionFindings(),
+            req.getRecommendedMethod(),
+            req.getDisposalStatus() != null ? req.getDisposalStatus() : "PENDING",
+            req.getInspectionDate(),
+            req.getApprovedBy(),
+            recorderId != null ? recorderId.intValue() : 0);
 
-        if (req.getApprovedById() != null) {
-            d.setApprovedBy(userRepository.findById(req.getApprovedById()).orElse(null));
-        }
-
-        DisposalLedger saved = disposalLedgerRepository.save(d);
-        auditLogService.log("DISPOSAL_CREATED", "Disposal", saved.getId(), "disposal",
-                "Disposal for asset: " + asset.getPropertyNumber());
+        DisposalLedger saved = findById(newId);
+        auditLogService.log("DISPOSAL_CREATED", "Disposal", newId, "disposal",
+            "Disposal for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : req.getAssetId()));
         return saved;
     }
 
     public DisposalLedger update(Long id, DisposalLedgerRequest req) {
-        DisposalLedger d = findById(id);
-        d.setReason(req.getReason());
-        d.setInspectionFindings(req.getInspectionFindings());
-        d.setRecommendedMethod(DisposalLedger.DisposalMethod.valueOf(req.getRecommendedMethod()));
-        if (req.getDisposalStatus() != null) {
-            d.setDisposalStatus(DisposalLedger.DisposalStatus.valueOf(req.getDisposalStatus()));
-        }
-        d.setInspectionDate(req.getInspectionDate());
-        if (req.getApprovedById() != null) {
-            d.setApprovedBy(userRepository.findById(req.getApprovedById()).orElse(null));
-        }
-        DisposalLedger saved = disposalLedgerRepository.save(d);
-        auditLogService.log("DISPOSAL_UPDATED", "Disposal", saved.getId(), "disposal",
-                "Updated disposal for asset: " + d.getAsset().getPropertyNumber());
+        findById(id); // throws if not found
+        jdbcTemplate.update("CALL sp_disposal_update(?, ?, ?, ?, ?, ?, ?)",
+            id,
+            req.getReason(),
+            req.getInspectionFindings(),
+            req.getRecommendedMethod(),
+            req.getDisposalStatus() != null ? req.getDisposalStatus() : "PENDING",
+            req.getInspectionDate(),
+            req.getApprovedBy());
+        DisposalLedger saved = findById(id);
+        auditLogService.log("DISPOSAL_UPDATED", "Disposal", id, "disposal",
+            "Updated disposal for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : ""));
         return saved;
     }
 
     public void delete(Long id, String deleteReason) {
         DisposalLedger d = findById(id);
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User deleter = userRepository.findByUsernameIgnoreCase(username).orElse(d.getRecordedBy());
-
-        DeletedDisposal snapshot = DeletedDisposal.builder()
-                .disposalId(d.getId())
-                .assetId(d.getAsset().getId())
-                .propertyNumber(d.getAsset().getPropertyNumber())
-                .assetDescription(d.getAsset().getDescription())
-                .reason(d.getReason())
-                .inspectionFindings(d.getInspectionFindings())
-                .recommendedMethod(d.getRecommendedMethod().name())
-                .disposalStatus(d.getDisposalStatus().name())
-                .inspectionDate(d.getInspectionDate())
-                .approvedByUserId(d.getApprovedBy() != null ? d.getApprovedBy().getId() : null)
-                .approvedByName(d.getApprovedBy() != null ? d.getApprovedBy().getFullName() : null)
-                .recordedByUserId(d.getRecordedBy().getId())
-                .recordedByName(d.getRecordedBy().getFullName())
-                .originalCreatedAt(d.getCreatedAt())
-                .deletedByUserId(deleter.getId())
-                .deletedByUsername(deleter.getUsername())
-                .deleteReason(deleteReason)
-                .build();
-        deletedDisposalRepository.save(snapshot);
-
-        d.setIsDeleted(true);
-        d.setDeletedAt(LocalDateTime.now());
-        d.setDeletedBy(deleter.getId());
-        d.setDeleteReason(deleteReason);
-        disposalLedgerRepository.save(d);
-
+        Long deleterId = getUserIdByUsername(username);
+        jdbcTemplate.update("CALL sp_disposal_soft_delete(?, ?, ?, ?)",
+            id,
+            deleterId != null ? deleterId.intValue() : 0,
+            username,
+            deleteReason);
         auditLogService.log("DISPOSAL_DELETED", "Disposal", id, "disposal",
-                "Deleted disposal for asset: " + d.getAsset().getPropertyNumber());
+            "Deleted disposal for asset: " + (d.getAsset() != null ? d.getAsset().getPropertyNumber() : ""));
+    }
+
+    private Long getUserIdByUsername(String username) {
+        List<Long> ids = jdbcTemplate.query(
+            "CALL sp_users_get_by_username(?)", (rs, rn) -> rs.getLong("id"), username);
+        return ids.isEmpty() ? null : ids.get(0);
     }
 }

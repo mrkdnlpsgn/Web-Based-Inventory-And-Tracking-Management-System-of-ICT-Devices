@@ -10,7 +10,7 @@ public class MaintenanceLedgerRequest {
     private String maintenanceType; // PREVENTIVE | CORRECTIVE | REPAIR
     private String findings;
     private String actionsTaken;
-    private Long assignedToId;
+    private String assignedTo;
     private LocalDate maintenanceDate;
     private BigDecimal cost;
     private String status; // COMPLETED | ONGOING | SCHEDULED

@@ -14,6 +14,7 @@ public class AssetRequest {
     private BigDecimal unitValue;
     private Long officeId;
     private String accountablePerson;
+    private Integer physicalCount;
     private String location;
     private String condition;       // SERVICEABLE | REPAIRABLE | UNSERVICEABLE
     private String lifecycleStatus; // REGISTERED | ASSIGNED | TRANSFERRED | UNDER_MAINTENANCE | DISPOSED | ARCHIVED

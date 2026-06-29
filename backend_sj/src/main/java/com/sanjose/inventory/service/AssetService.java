@@ -1,15 +1,21 @@
 package com.sanjose.inventory.service;
 
+import com.sanjose.inventory.config.SpHelper;
 import com.sanjose.inventory.dto.AssetRequest;
-import com.sanjose.inventory.entity.*;
+import com.sanjose.inventory.entity.Asset;
+import com.sanjose.inventory.entity.Category;
+import com.sanjose.inventory.entity.Office;
 import com.sanjose.inventory.exception.ResourceNotFoundException;
-import com.sanjose.inventory.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -17,151 +23,157 @@ import java.util.List;
 @Transactional
 public class AssetService {
 
-    private final AssetRepository assetRepository;
-    private final CategoryRepository categoryRepository;
-    private final OfficeRepository officeRepository;
-    private final UserRepository userRepository;
-    private final MaintenanceLedgerRepository maintenanceLedgerRepository;
-    private final DisposalLedgerRepository disposalLedgerRepository;
-    private final DeletedAssetRepository deletedAssetRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
 
-    public List<Asset> findAll() {
-        return assetRepository.findByIsDeletedFalse();
+    private static final RowMapper<Asset> ASSET_MAPPER = (rs, rn) -> {
+        Asset a = new Asset();
+        a.setId(rs.getLong("id"));
+        a.setPropertyNumber(rs.getString("propertyNumber"));
+        a.setDescription(rs.getString("description"));
+        a.setQuantity(rs.getObject("quantity", Integer.class));
+        Date acqDate = rs.getDate("acquisitionDate");
+        a.setAcquisitionDate(acqDate != null ? acqDate.toLocalDate() : null);
+        a.setUnitValue(rs.getBigDecimal("unitValue"));
+        a.setPhysicalCount(rs.getObject("physicalCount", Integer.class));
+        a.setLocation(rs.getString("location"));
+        String cond = rs.getString("condition");
+        a.setCondition(cond != null ? Asset.AssetCondition.valueOf(cond) : null);
+        String lc = rs.getString("lifecycleStatus");
+        a.setLifecycleStatus(lc != null ? Asset.LifecycleStatus.valueOf(lc) : null);
+        a.setAccountablePerson(rs.getString("accountablePerson"));
+        a.setQrCodePath(rs.getString("qrCodePath"));
+        a.setSha256Hash(rs.getString("sha256Hash"));
+        a.setRemarks(rs.getString("remarks"));
+        Timestamp createdTs = rs.getTimestamp("createdAt");
+        a.setCreatedAt(createdTs != null ? createdTs.toLocalDateTime() : null);
+        Timestamp updatedTs = rs.getTimestamp("updatedAt");
+        a.setUpdatedAt(updatedTs != null ? updatedTs.toLocalDateTime() : null);
+
+        Long catId = rs.getObject("category_id", Long.class);
+        if (catId != null) {
+            Category c = new Category();
+            c.setId(catId);
+            c.setCategoryName(rs.getString("categoryName"));
+            a.setCategory(c);
+        }
+
+        Long officeId = rs.getObject("office_id", Long.class);
+        if (officeId != null) {
+            Office o = new Office();
+            o.setId(officeId);
+            o.setOfficeName(rs.getString("officeName"));
+            a.setOffice(o);
+        }
+
+        return a;
+    };
+
+    public List<Asset> findAll(String search) {
+        if (search != null && !search.isBlank()) {
+            return jdbcTemplate.query("CALL sp_assets_search(?)", ASSET_MAPPER, search.trim());
+        }
+        return jdbcTemplate.query("CALL sp_assets_get_all()", ASSET_MAPPER);
     }
 
     public Asset findById(Long id) {
-        return assetRepository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Asset not found: " + id));
+        List<Asset> list = jdbcTemplate.query("CALL sp_assets_get_by_id(?)", ASSET_MAPPER, id);
+        if (list.isEmpty()) throw new ResourceNotFoundException("Asset not found: " + id);
+        return list.get(0);
     }
 
     public Asset create(AssetRequest req) {
-        Asset asset = buildAsset(new Asset(), req);
-        asset = assetRepository.save(asset);
-        handleConditionLedger(asset);
-        auditLogService.log("ASSET_CREATED", "Assets", asset.getId(), "asset",
-                "Created asset: " + asset.getPropertyNumber());
-        return asset;
+        Long newId = SpHelper.callWithOutLong(jdbcTemplate,
+            "CALL sp_assets_create(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            req.getPropertyNumber(), req.getDescription(),
+            req.getCategoryId(), req.getQuantity() != null ? req.getQuantity() : 1,
+            req.getAcquisitionDate(), req.getUnitValue(), req.getOfficeId(),
+            req.getAccountablePerson(), req.getPhysicalCount(), req.getLocation(),
+            req.getCondition(), req.getLifecycleStatus(),
+            req.getQrCodePath(), req.getSha256Hash(), req.getRemarks());
+
+        Asset saved = findById(newId);
+        handleConditionLedger(saved);
+        auditLogService.log("ASSET_CREATED", "Assets", newId, "asset",
+            "Created asset: " + saved.getPropertyNumber());
+        return findById(newId); // re-fetch after potential lifecycle update
     }
 
     public Asset update(Long id, AssetRequest req) {
-        Asset asset = findById(id);
-        Asset.AssetCondition oldCondition = asset.getCondition();
-        buildAsset(asset, req);
-        asset = assetRepository.save(asset);
-        // Only auto-create ledger if condition changed
-        if (oldCondition != asset.getCondition()) {
-            handleConditionLedger(asset);
+        Asset before = findById(id);
+        Asset.AssetCondition oldCondition = before.getCondition();
+
+        jdbcTemplate.update("CALL sp_assets_update(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            id,
+            req.getPropertyNumber(), req.getDescription(),
+            req.getCategoryId(), req.getQuantity() != null ? req.getQuantity() : 1,
+            req.getAcquisitionDate(), req.getUnitValue(), req.getOfficeId(),
+            req.getAccountablePerson(), req.getPhysicalCount(), req.getLocation(),
+            req.getCondition(), req.getLifecycleStatus(),
+            req.getQrCodePath(), req.getSha256Hash(), req.getRemarks());
+
+        Asset saved = findById(id);
+        if (oldCondition != saved.getCondition()) {
+            handleConditionLedger(saved);
         }
-        auditLogService.log("ASSET_UPDATED", "Assets", asset.getId(), "asset",
-                "Updated asset: " + asset.getPropertyNumber());
-        return asset;
+        auditLogService.log("ASSET_UPDATED", "Assets", id, "asset",
+            "Updated asset: " + saved.getPropertyNumber());
+        return findById(id); // re-fetch after potential lifecycle update
     }
 
     public void delete(Long id, String deleteReason) {
         Asset asset = findById(id);
-        String currentUsername = org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication().getName();
-        User deleter = userRepository.findByUsernameIgnoreCase(currentUsername)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + currentUsername));
-
-        // Archive snapshot
-        DeletedAsset snapshot = DeletedAsset.builder()
-                .assetId(asset.getId())
-                .propertyNumber(asset.getPropertyNumber())
-                .description(asset.getDescription())
-                .categoryId(asset.getCategory().getId())
-                .categoryName(asset.getCategory().getCategoryName())
-                .quantity(asset.getQuantity())
-                .acquisitionDate(asset.getAcquisitionDate())
-                .unitValue(asset.getUnitValue())
-                .officeId(asset.getOffice().getId())
-                .officeName(asset.getOffice().getOfficeName())
-                .accountablePersonId(null)
-                .accountablePersonName(asset.getAccountablePerson())
-                .location(asset.getLocation())
-                .condition(asset.getCondition().name())
-                .lifecycleStatus(asset.getLifecycleStatus().name())
-                .qrCodePath(asset.getQrCodePath())
-                .sha256Hash(asset.getSha256Hash())
-                .remarks(asset.getRemarks())
-                .originalCreatedAt(asset.getCreatedAt())
-                .originalUpdatedAt(asset.getUpdatedAt())
-                .deletedByUserId(deleter.getId())
-                .deletedByUsername(deleter.getUsername())
-                .deleteReason(deleteReason)
-                .build();
-        deletedAssetRepository.save(snapshot);
-
-        // Soft delete
-        asset.setIsDeleted(true);
-        asset.setDeletedAt(LocalDateTime.now());
-        asset.setDeletedBy(deleter.getId());
-        asset.setDeleteReason(deleteReason);
-        assetRepository.save(asset);
-
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        Long deleterId = getUserIdByUsername(username);
+        jdbcTemplate.update("CALL sp_assets_soft_delete(?, ?, ?, ?)",
+            id,
+            deleterId != null ? deleterId.intValue() : 0,
+            username,
+            deleteReason);
         auditLogService.log("ASSET_DELETED", "Assets", id, "asset",
-                "Deleted: " + asset.getPropertyNumber());
-    }
-
-    private Asset buildAsset(Asset asset, AssetRequest req) {
-        asset.setPropertyNumber(req.getPropertyNumber());
-        asset.setDescription(req.getDescription());
-        asset.setQuantity(req.getQuantity() != null ? req.getQuantity() : 1);
-        asset.setAcquisitionDate(req.getAcquisitionDate());
-        asset.setUnitValue(req.getUnitValue());
-        asset.setLocation(req.getLocation());
-        asset.setCondition(Asset.AssetCondition.valueOf(req.getCondition()));
-        asset.setLifecycleStatus(Asset.LifecycleStatus.valueOf(req.getLifecycleStatus()));
-        asset.setQrCodePath(req.getQrCodePath());
-        asset.setSha256Hash(req.getSha256Hash());
-        asset.setRemarks(req.getRemarks());
-        asset.setCategory(categoryRepository.findById(req.getCategoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + req.getCategoryId())));
-        asset.setOffice(officeRepository.findById(req.getOfficeId())
-                .orElseThrow(() -> new ResourceNotFoundException("Office not found: " + req.getOfficeId())));
-        asset.setAccountablePerson(req.getAccountablePerson());
-        return asset;
+            "Deleted: " + asset.getPropertyNumber());
     }
 
     private void handleConditionLedger(Asset asset) {
-        String currentUsername = org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication().getName();
-        User recorder = userRepository.findByUsernameIgnoreCase(currentUsername)
-                .orElse(null);
+        if (asset.getCondition() == null) return;
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        Long recorderId = getUserIdByUsername(username);
+        int recId = recorderId != null ? recorderId.intValue() : 0;
 
         if (asset.getCondition() == Asset.AssetCondition.REPAIRABLE) {
-            // Auto-create maintenance record
-            MaintenanceLedger m = MaintenanceLedger.builder()
-                    .asset(asset)
-                    .maintenanceType(MaintenanceLedger.MaintenanceType.REPAIR)
-                    .findings("Asset flagged as repairable — requires maintenance")
-                    .actionsTaken("Pending review and assignment")
-                    .maintenanceDate(LocalDate.now())
-                    .status(MaintenanceLedger.MaintenanceStatus.ONGOING)
-                    .recordedBy(recorder)
-                    .build();
-            maintenanceLedgerRepository.save(m);
-            // Update lifecycle
-            asset.setLifecycleStatus(Asset.LifecycleStatus.UNDER_MAINTENANCE);
-            assetRepository.save(asset);
+            jdbcTemplate.update("CALL sp_disposal_delete_by_asset(?)", asset.getId());
+            SpHelper.callWithOutLong(jdbcTemplate,
+                "CALL sp_maintenance_create(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                asset.getId(), "REPAIR",
+                "Asset flagged as repairable — requires maintenance",
+                "Pending review and assignment",
+                null, LocalDate.now(), null, "ONGOING", recId);
+            jdbcTemplate.update("CALL sp_assets_update_lifecycle(?, ?)",
+                asset.getId(), "UNDER_MAINTENANCE");
 
         } else if (asset.getCondition() == Asset.AssetCondition.UNSERVICEABLE) {
-            // Auto-create disposal record
-            DisposalLedger d = DisposalLedger.builder()
-                    .asset(asset)
-                    .reason("Asset is unserviceable and flagged for disposal")
-                    .inspectionFindings("Auto-generated from asset condition change")
-                    .recommendedMethod(DisposalLedger.DisposalMethod.DESTRUCTION)
-                    .disposalStatus(DisposalLedger.DisposalStatus.PENDING)
-                    .inspectionDate(LocalDate.now())
-                    .recordedBy(recorder)
-                    .build();
-            disposalLedgerRepository.save(d);
-            // Update lifecycle
-            asset.setLifecycleStatus(Asset.LifecycleStatus.DISPOSED);
-            assetRepository.save(asset);
+            jdbcTemplate.update("CALL sp_maintenance_delete_by_asset(?)", asset.getId());
+            SpHelper.callWithOutLong(jdbcTemplate,
+                "CALL sp_disposal_create(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                asset.getId(),
+                "Asset is unserviceable and flagged for disposal",
+                "Auto-generated from asset condition change",
+                "DESTRUCTION", "PENDING",
+                LocalDate.now(), null, recId);
+            jdbcTemplate.update("CALL sp_assets_update_lifecycle(?, ?)",
+                asset.getId(), "DISPOSED");
+
+        } else if (asset.getCondition() == Asset.AssetCondition.SERVICEABLE) {
+            jdbcTemplate.update("CALL sp_maintenance_delete_by_asset(?)", asset.getId());
+            jdbcTemplate.update("CALL sp_disposal_delete_by_asset(?)", asset.getId());
+            jdbcTemplate.update("CALL sp_assets_update_lifecycle(?, ?)",
+                asset.getId(), "REGISTERED");
         }
-        // SERVICEABLE: no ledger created
+    }
+
+    private Long getUserIdByUsername(String username) {
+        List<Long> ids = jdbcTemplate.query(
+            "CALL sp_users_get_by_username(?)", (rs, rn) -> rs.getLong("id"), username);
+        return ids.isEmpty() ? null : ids.get(0);
     }
 }

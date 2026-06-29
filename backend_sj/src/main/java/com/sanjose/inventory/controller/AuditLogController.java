@@ -15,5 +15,7 @@ public class AuditLogController {
     private final AuditLogService auditLogService;
 
     @GetMapping
-    public List<AuditLog> getAll() { return auditLogService.findAll(); }
+    public List<AuditLog> getAll(@RequestParam(required = false) String search) {
+        return auditLogService.findAll(search);
+    }
 }

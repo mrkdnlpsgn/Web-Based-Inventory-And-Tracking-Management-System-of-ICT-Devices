@@ -52,6 +52,9 @@ public class Asset {
     @Column(name = "accountable_person", length = 150)
     private String accountablePerson;
 
+    @Column(name = "physical_count")
+    private Integer physicalCount;
+
     @Column(nullable = false, length = 150)
     private String location;
 

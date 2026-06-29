@@ -20,7 +20,7 @@ function SelectInput({ children, ...props }) {
   )
 }
 
-const EMPTY = { assetId: '', maintenanceType: 'PREVENTIVE', findings: '', actionsTaken: '', assignedToId: '', maintenanceDate: '', cost: '', status: 'SCHEDULED' }
+const EMPTY = { assetId: '', maintenanceType: 'PREVENTIVE', findings: '', actionsTaken: '', assignedTo: '', maintenanceDate: '', cost: '', status: 'SCHEDULED' }
 
 function AddMaintenanceModal({ onClose, onSave, initial = null, assets = [], users = [] }) {
   const isEditing = !!initial
@@ -31,7 +31,7 @@ function AddMaintenanceModal({ onClose, onSave, initial = null, assets = [], use
           maintenanceType: initial.maintenanceType || 'PREVENTIVE',
           findings: initial.findings || '',
           actionsTaken: initial.actionsTaken || '',
-          assignedToId: initial.assignedTo?.id ? String(initial.assignedTo.id) : '',
+          assignedTo: initial.assignedTo || '',
           maintenanceDate: initial.maintenanceDate ? initial.maintenanceDate.slice(0, 10) : '',
           cost: initial.cost !== null && initial.cost !== undefined ? String(initial.cost) : '',
           status: initial.status || 'SCHEDULED',
@@ -53,6 +53,7 @@ function AddMaintenanceModal({ onClose, onSave, initial = null, assets = [], use
     if (!form.findings.trim()) errs.findings = 'Findings are required.'
     if (!form.actionsTaken.trim()) errs.actionsTaken = 'Actions taken are required.'
     if (!form.maintenanceDate) errs.maintenanceDate = 'Date is required.'
+    if (!form.cost && form.cost !== 0) errs.cost = 'Cost is required.'
     if (Object.keys(errs).length) { setErrors(errs); return }
     setSaving(true)
     try {
@@ -61,9 +62,9 @@ function AddMaintenanceModal({ onClose, onSave, initial = null, assets = [], use
         maintenanceType: form.maintenanceType,
         findings: form.findings.trim(),
         actionsTaken: form.actionsTaken.trim(),
-        assignedToId: form.assignedToId ? Number(form.assignedToId) : null,
+        assignedTo: form.assignedTo.trim() || null,
         maintenanceDate: form.maintenanceDate,
-        cost: form.cost ? Number(form.cost) : null,
+        cost: Number(form.cost),
         status: form.status,
       }
       await onSave(payload)
@@ -125,11 +126,8 @@ function AddMaintenanceModal({ onClose, onSave, initial = null, assets = [], use
 
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Assigned To</label>
-            <SelectInput value={form.assignedToId} onChange={set('assignedToId')}>
-              <option value="">— None —</option>
-              {users.map((u) => <option key={u.id} value={String(u.id)}>{u.fullName || u.username}</option>)}
-            </SelectInput>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Accountable Person</label>
+            <input className={INPUT_CLASS} placeholder="Full name of accountable person" value={form.assignedTo} onChange={set('assignedTo')} />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Maintenance Date<span className="text-red-400 ml-0.5">*</span></label>
@@ -139,8 +137,9 @@ function AddMaintenanceModal({ onClose, onSave, initial = null, assets = [], use
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Cost (PHP) <span className="text-slate-400 font-normal">(optional)</span></label>
+          <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Cost (PHP)<span className="text-red-400 ml-0.5">*</span></label>
           <input type="number" min="0" step="0.01" className={INPUT_CLASS} placeholder="0.00" value={form.cost} onChange={set('cost')} />
+          {errors.cost && <p className="text-xs text-red-400">{errors.cost}</p>}
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-zinc-800">

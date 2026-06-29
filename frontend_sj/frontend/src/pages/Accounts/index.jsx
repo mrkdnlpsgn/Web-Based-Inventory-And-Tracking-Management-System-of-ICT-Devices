@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { setCredentials } from '../../store/slices/authSlice'
 import { useToast } from '../../context/ToastContext'
+import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import Badge from '../../components/common/Badge'
@@ -44,10 +45,13 @@ function AccountsTab() {
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing]       = useState(null)
   const [deleting, setDeleting]     = useState(null)
+  const [search, setSearch]         = useState('')
 
-  const load = useCallback(async () => {
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchUsers = useCallback(async (q = '') => {
     try {
-      const { data } = await getUsers()
+      const { data } = await getUsers(q)
       setUsers(data)
     } catch {
       toast.show('Failed to load accounts.', 'error')
@@ -56,7 +60,7 @@ function AccountsTab() {
     }
   }, [toast])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { fetchUsers(debouncedSearch) }, [debouncedSearch, fetchUsers])
 
   const handleCreate = async (form) => {
     const { data } = await createUser(form)
@@ -85,7 +89,13 @@ function AccountsTab() {
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <p className="text-xs text-slate-400 dark:text-zinc-500">Manage staff and administrator accounts</p>
+        <div className="relative w-full sm:max-w-xs">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+          </svg>
+          <input type="text" placeholder="Search accounts…" value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+        </div>
         <Button size="md" className="self-start sm:self-auto" onClick={() => setShowCreate(true)}>
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -246,23 +256,25 @@ function AuditLogsTab() {
   const [actionFilter, setActionFilter] = useState('ALL')
   const [search, setSearch]             = useState('')
 
-  useEffect(() => {
-    getAuditLogs()
-      .then(({ data }) => setLogs(data))
-      .catch(() => toast.show('Failed to load audit logs.', 'error'))
-      .finally(() => setLoading(false))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchLogs = useCallback(async (q = '') => {
+    setLoading(true)
+    try {
+      const { data } = await getAuditLogs(q)
+      setLogs(data)
+    } catch {
+      toast.show('Failed to load audit logs.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => { fetchLogs(debouncedSearch) }, [debouncedSearch, fetchLogs])
 
   const filtered = logs.filter((l) => {
     if (moduleFilter !== 'ALL' && l.module !== moduleFilter) return false
     if (actionFilter !== 'ALL' && l.action !== actionFilter) return false
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      return (
-        l.details?.toLowerCase().includes(q) ||
-        l.user?.username?.toLowerCase().includes(q)
-      )
-    }
     return true
   })
 

@@ -16,7 +16,7 @@ public class AssetHistoryController {
     private final AssetHistoryService assetHistoryService;
 
     @GetMapping
-    public List<AssetHistory> getAll() { return assetHistoryService.findAll(); }
+    public List<AssetHistory> getAll(@RequestParam(required = false) String search) { return assetHistoryService.findAll(search); }
 
     @GetMapping("/asset/{assetId}")
     public List<AssetHistory> getByAsset(@PathVariable Long assetId) {

@@ -38,10 +38,8 @@ public class MaintenanceLedger {
     @Column(name = "actions_taken", nullable = false, columnDefinition = "TEXT")
     private String actionsTaken;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assigned_to")
-    @JsonIgnoreProperties({"password", "office", "failedLoginAttempts", "accountLockedUntil"})
-    private User assignedTo;
+    @Column(name = "assigned_to", length = 150)
+    private String assignedTo;
 
     @Column(name = "maintenance_date", nullable = false)
     private LocalDate maintenanceDate;

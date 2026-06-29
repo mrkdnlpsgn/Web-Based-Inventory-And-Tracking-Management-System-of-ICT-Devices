@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useDispatch } from 'react-redux'
 import { useSelector } from 'react-redux'
 import { useToast } from '../../context/ToastContext'
+import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -58,18 +59,14 @@ function Assets() {
   const [selected, setSelected]     = useState(null)
   const [page, setPage]             = useState(1)
 
-  const load = useCallback(async () => {
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchAssets = useCallback(async (q = '') => {
     setLoading(true)
     try {
-      const [assetRes, catRes, officeRes] = await Promise.all([
-        getAssets().catch(() => ({ data: [] })),
-        getCategories().catch(() => ({ data: [] })),
-        getOffices().catch(() => ({ data: [] })),
-      ])
-      setItems(assetRes.data)
-      dispatch(setAssets(assetRes.data))
-      setCategories(catRes.data)
-      setOffices(officeRes.data)
+      const { data } = await getAssets(q)
+      setItems(data)
+      dispatch(setAssets(data))
     } catch {
       toast.show('Failed to load assets.', 'error')
     } finally {
@@ -77,8 +74,19 @@ function Assets() {
     }
   }, [dispatch, toast])
 
-  useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(1) }, [search, filterCondition, filterLifecycle, filterCategory])
+  const load = useCallback(() => {
+    Promise.all([getCategories().catch(() => ({ data: [] })), getOffices().catch(() => ({ data: [] }))])
+      .then(([catRes, officeRes]) => { setCategories(catRes.data); setOffices(officeRes.data) })
+    fetchAssets(search)
+  }, [fetchAssets, search]) // eslint-disable-line
+
+  useEffect(() => {
+    Promise.all([getCategories().catch(() => ({ data: [] })), getOffices().catch(() => ({ data: [] }))])
+      .then(([catRes, officeRes]) => { setCategories(catRes.data); setOffices(officeRes.data) })
+  }, [])
+
+  useEffect(() => { fetchAssets(debouncedSearch) }, [debouncedSearch, fetchAssets])
+  useEffect(() => { setPage(1) }, [debouncedSearch, filterCondition, filterLifecycle, filterCategory])
 
   const handleCreate = async (payload) => {
     const { data } = await createAsset(payload)
@@ -118,19 +126,9 @@ function Assets() {
       if (filterCondition && a.condition !== filterCondition) return false
       if (filterLifecycle && a.lifecycleStatus !== filterLifecycle) return false
       if (filterCategory && String(a.category?.id) !== filterCategory) return false
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        return (
-          a.propertyNumber?.toLowerCase().includes(q) ||
-          a.description?.toLowerCase().includes(q) ||
-          a.office?.officeName?.toLowerCase().includes(q) ||
-          a.accountablePerson?.toLowerCase().includes(q) ||
-          a.location?.toLowerCase().includes(q)
-        )
-      }
       return true
     })
-  }, [items, search, filterCondition, filterLifecycle, filterCategory])
+  }, [items, filterCondition, filterLifecycle, filterCategory])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -180,7 +178,7 @@ function Assets() {
               {filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ''} asset{filtered.length !== 1 ? 's' : ''}
             </span>
           )}
-          <button onClick={load} className="ml-auto p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all" title="Refresh">
+          <button onClick={() => fetchAssets(search)} className="ml-auto p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all" title="Refresh">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" /></svg>
           </button>
         </div>
@@ -207,7 +205,7 @@ function Assets() {
             <table className="min-w-full text-sm divide-y divide-slate-100 dark:divide-zinc-800">
               <thead>
                 <tr>
-                  {['Property No.', 'Description', 'Category', 'Condition', 'Status', 'Office', 'Unit Value', 'Date', ...(isAdmin ? [''] : [])].map((h) => (
+                  {['Property No.', 'Description', 'Category', 'Qty (Property Card)', 'Qty (Physical Count)', 'Shortage/Overage Qty', 'Shortage/Overage Value', 'Location', 'Unit Value', 'Date', 'Remarks', ...(isAdmin ? [''] : [])].map((h) => (
                     <th key={h} className="px-5 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -224,15 +222,34 @@ function Assets() {
                       <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[180px]">{a.description}</p>
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">{a.category?.categoryName || '—'}</td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${CONDITION_BADGE[a.condition] || ''}`}>{a.condition}</span>
+                    <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap text-center">{a.quantity ?? '—'}</td>
+                    <td className="px-5 py-3.5 text-xs whitespace-nowrap text-center">
+                      {a.physicalCount != null ? a.physicalCount : <span className="text-slate-400 dark:text-zinc-600">—</span>}
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${LIFECYCLE_BADGE[a.lifecycleStatus] || ''}`}>{a.lifecycleStatus?.replace('_', ' ')}</span>
-                    </td>
+                    {(() => {
+                      const diff = a.physicalCount != null ? a.physicalCount - (a.quantity ?? 0) : null
+                      const val  = diff != null ? diff * Number(a.unitValue ?? 0) : null
+                      const color = diff == null ? '' : diff < 0 ? 'text-red-400' : diff > 0 ? 'text-emerald-400' : 'text-slate-400 dark:text-zinc-500'
+                      return (
+                        <>
+                          <td className={`px-5 py-3.5 text-xs whitespace-nowrap text-center font-medium ${color}`}>
+                            {diff == null ? <span className="text-slate-400 dark:text-zinc-600">—</span> : diff > 0 ? `+${diff}` : diff}
+                          </td>
+                          <td className={`px-5 py-3.5 text-xs whitespace-nowrap text-center font-medium ${color}`}>
+                            {val == null ? <span className="text-slate-400 dark:text-zinc-600">—</span> : (val > 0 ? '+' : '') + '₱' + Math.abs(val).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </td>
+                        </>
+                      )
+                    })()}
                     <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">{a.office?.officeName || '—'}</td>
                     <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">{php(a.unitValue)}</td>
                     <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">{fmt(a.acquisitionDate)}</td>
+                    <td className="px-5 py-3.5 text-xs max-w-[200px]">
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex items-center self-start px-2 py-0.5 rounded-full text-xs font-semibold ${CONDITION_BADGE[a.condition] || ''}`}>{a.condition}</span>
+                        {a.remarks && <span className="text-slate-500 dark:text-zinc-400 truncate" title={a.remarks}>{a.remarks}</span>}
+                      </div>
+                    </td>
                     {isAdmin && (
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">

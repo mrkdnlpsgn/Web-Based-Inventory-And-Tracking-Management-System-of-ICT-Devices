@@ -1,19 +1,19 @@
 package com.sanjose.inventory.service;
 
+import com.sanjose.inventory.config.SpHelper;
 import com.sanjose.inventory.dto.AssetHistoryRequest;
 import com.sanjose.inventory.entity.Asset;
 import com.sanjose.inventory.entity.AssetHistory;
 import com.sanjose.inventory.entity.Office;
 import com.sanjose.inventory.entity.User;
 import com.sanjose.inventory.exception.ResourceNotFoundException;
-import com.sanjose.inventory.repository.AssetHistoryRepository;
-import com.sanjose.inventory.repository.AssetRepository;
-import com.sanjose.inventory.repository.OfficeRepository;
-import com.sanjose.inventory.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.util.List;
 
 @Service
@@ -21,43 +21,93 @@ import java.util.List;
 @Transactional
 public class AssetHistoryService {
 
-    private final AssetHistoryRepository assetHistoryRepository;
-    private final AssetRepository assetRepository;
-    private final OfficeRepository officeRepository;
-    private final UserRepository userRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
 
-    public List<AssetHistory> findAll() {
-        return assetHistoryRepository.findAllByOrderByEventDateDesc();
+    private static final RowMapper<AssetHistory> HISTORY_MAPPER = (rs, rn) -> {
+        AssetHistory h = new AssetHistory();
+        h.setId(rs.getLong("id"));
+        String evType = rs.getString("eventType");
+        h.setEventType(evType != null ? AssetHistory.EventType.valueOf(evType) : null);
+        Timestamp evDate = rs.getTimestamp("eventDate");
+        h.setEventDate(evDate != null ? evDate.toLocalDateTime() : null);
+        h.setNotes(rs.getString("notes"));
+
+        Long assetId = rs.getObject("asset_id", Long.class);
+        if (assetId != null) {
+            Asset a = new Asset();
+            a.setId(assetId);
+            a.setPropertyNumber(rs.getString("asset_propertyNumber"));
+            a.setDescription(rs.getString("asset_description"));
+            h.setAsset(a);
+        }
+
+        Long pbId = rs.getObject("pb_id", Long.class);
+        if (pbId != null) {
+            User u = new User();
+            u.setId(pbId);
+            u.setUsername(rs.getString("pb_username"));
+            u.setFullName(rs.getString("pb_fullName"));
+            h.setPerformedBy(u);
+        }
+
+        Long foId = rs.getObject("fo_id", Long.class);
+        if (foId != null) {
+            Office fo = new Office();
+            fo.setId(foId);
+            fo.setOfficeName(rs.getString("fo_officeName"));
+            h.setFromOffice(fo);
+        }
+
+        Long tooId = rs.getObject("too_id", Long.class);
+        if (tooId != null) {
+            Office too = new Office();
+            too.setId(tooId);
+            too.setOfficeName(rs.getString("too_officeName"));
+            h.setToOffice(too);
+        }
+
+        return h;
+    };
+
+    public List<AssetHistory> findAll(String search) {
+        if (search != null && !search.isBlank()) {
+            return jdbcTemplate.query("CALL sp_asset_history_search(?)", HISTORY_MAPPER, search.trim());
+        }
+        return jdbcTemplate.query("CALL sp_asset_history_get_all()", HISTORY_MAPPER);
     }
 
     public List<AssetHistory> findByAsset(Long assetId) {
-        return assetHistoryRepository.findByAsset_IdOrderByEventDateDesc(assetId);
+        return jdbcTemplate.query("CALL sp_asset_history_get_by_asset(?)", HISTORY_MAPPER, assetId);
     }
 
     public AssetHistory create(AssetHistoryRequest req) {
-        Asset asset = assetRepository.findByIdAndIsDeletedFalse(req.getAssetId())
-                .orElseThrow(() -> new ResourceNotFoundException("Asset not found: " + req.getAssetId()));
-        User performer = userRepository.findById(req.getPerformedById())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + req.getPerformedById()));
+        Long newId = SpHelper.callWithOutLong(jdbcTemplate,
+            "CALL sp_asset_history_create(?, ?, ?, ?, ?, ?, ?)",
+            req.getAssetId(),
+            req.getEventType(),
+            req.getFromOfficeId() != null ? req.getFromOfficeId().intValue() : 0,
+            req.getToOfficeId() != null ? req.getToOfficeId().intValue() : 0,
+            req.getPerformedById() != null ? req.getPerformedById().intValue() : 0,
+            req.getNotes());
 
-        AssetHistory history = AssetHistory.builder()
-                .asset(asset)
-                .eventType(AssetHistory.EventType.valueOf(req.getEventType()))
-                .performedBy(performer)
-                .notes(req.getNotes())
-                .build();
+        List<AssetHistory> list = jdbcTemplate.query(
+            "SELECT h.history_id AS id, h.event_type AS eventType, h.event_date AS eventDate, h.notes, " +
+            "a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description, " +
+            "u.user_id AS pb_id, u.username AS pb_username, u.full_name AS pb_fullName, " +
+            "fo.office_id AS fo_id, fo.office_name AS fo_officeName, " +
+            "too.office_id AS too_id, too.office_name AS too_officeName " +
+            "FROM asset_history h " +
+            "LEFT JOIN assets a ON h.asset_id = a.asset_id " +
+            "LEFT JOIN users u ON h.performed_by = u.user_id " +
+            "LEFT JOIN offices fo ON h.from_office_id = fo.office_id " +
+            "LEFT JOIN offices too ON h.to_office_id = too.office_id " +
+            "WHERE h.history_id = ?",
+            HISTORY_MAPPER, newId);
 
-        if (req.getFromOfficeId() != null) {
-            history.setFromOffice(officeRepository.findById(req.getFromOfficeId()).orElse(null));
-        }
-        if (req.getToOfficeId() != null) {
-            history.setToOffice(officeRepository.findById(req.getToOfficeId()).orElse(null));
-        }
-
-        AssetHistory saved = assetHistoryRepository.save(history);
-        auditLogService.log("HISTORY_CREATED", "AssetHistory", saved.getId(), "asset_history",
-                "Event: " + saved.getEventType() + " for asset " + asset.getPropertyNumber());
+        AssetHistory saved = list.isEmpty() ? new AssetHistory() : list.get(0);
+        auditLogService.log("HISTORY_CREATED", "AssetHistory", newId, "asset_history",
+            "Event: " + req.getEventType());
         return saved;
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useToast } from '../../context/ToastContext'
+import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -86,10 +87,12 @@ function Offices() {
   const [editing, setEditing]   = useState(null)
   const [deleting, setDeleting] = useState(null)
 
-  const load = useCallback(async () => {
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchOffices = useCallback(async (q = '') => {
     setLoading(true)
     try {
-      const { data } = await getOffices()
+      const { data } = await getOffices(q)
       setOffices(data)
     } catch {
       toast.show('Failed to load offices.', 'error')
@@ -98,7 +101,7 @@ function Offices() {
     }
   }, [toast])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { fetchOffices(debouncedSearch) }, [debouncedSearch, fetchOffices])
 
   const handleCreate = async (payload) => {
     const { data } = await createOffice(payload)
@@ -124,9 +127,7 @@ function Offices() {
     }
   }
 
-  const filtered = offices.filter((o) =>
-    !search.trim() || o.officeName.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = offices
 
   return (
     <MainLayout>
@@ -151,7 +152,7 @@ function Offices() {
           <p className="text-sm font-semibold text-slate-700 dark:text-zinc-300">All Offices</p>
           {!loading && (
             <span className="text-xs font-medium text-slate-500 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 px-2 py-0.5 rounded-full">
-              {filtered.length}{filtered.length !== offices.length ? ` of ${offices.length}` : ''} office{offices.length !== 1 ? 's' : ''}
+              {filtered.length} office{filtered.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>

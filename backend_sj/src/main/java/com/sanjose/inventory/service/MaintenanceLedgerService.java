@@ -1,15 +1,20 @@
 package com.sanjose.inventory.service;
 
+import com.sanjose.inventory.config.SpHelper;
 import com.sanjose.inventory.dto.MaintenanceLedgerRequest;
-import com.sanjose.inventory.entity.*;
+import com.sanjose.inventory.entity.Asset;
+import com.sanjose.inventory.entity.MaintenanceLedger;
+import com.sanjose.inventory.entity.User;
 import com.sanjose.inventory.exception.ResourceNotFoundException;
-import com.sanjose.inventory.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.List;
 
 @Service
@@ -17,104 +22,120 @@ import java.util.List;
 @Transactional
 public class MaintenanceLedgerService {
 
-    private final MaintenanceLedgerRepository maintenanceLedgerRepository;
-    private final DeletedMaintenanceRepository deletedMaintenanceRepository;
-    private final AssetRepository assetRepository;
-    private final UserRepository userRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
 
-    public List<MaintenanceLedger> findAll() {
-        return maintenanceLedgerRepository.findByIsDeletedFalse();
+    private static final RowMapper<MaintenanceLedger> MAINT_MAPPER = (rs, rn) -> {
+        MaintenanceLedger m = new MaintenanceLedger();
+        m.setId(rs.getLong("id"));
+        String mType = rs.getString("maintenanceType");
+        m.setMaintenanceType(mType != null ? MaintenanceLedger.MaintenanceType.valueOf(mType) : null);
+        m.setFindings(rs.getString("findings"));
+        m.setActionsTaken(rs.getString("actionsTaken"));
+        Date md = rs.getDate("maintenanceDate");
+        m.setMaintenanceDate(md != null ? md.toLocalDate() : null);
+        m.setCost(rs.getBigDecimal("cost"));
+        String status = rs.getString("status");
+        m.setStatus(status != null ? MaintenanceLedger.MaintenanceStatus.valueOf(status) : null);
+        Timestamp createdTs = rs.getTimestamp("createdAt");
+        m.setCreatedAt(createdTs != null ? createdTs.toLocalDateTime() : null);
+
+        Long assetId = rs.getObject("asset_id", Long.class);
+        if (assetId != null) {
+            Asset a = new Asset();
+            a.setId(assetId);
+            a.setPropertyNumber(rs.getString("asset_propertyNumber"));
+            a.setDescription(rs.getString("asset_description"));
+            m.setAsset(a);
+        }
+
+        Long rbId = rs.getObject("rb_id", Long.class);
+        if (rbId != null) {
+            User rb = new User();
+            rb.setId(rbId);
+            rb.setUsername(rs.getString("rb_username"));
+            rb.setFullName(rs.getString("rb_fullName"));
+            m.setRecordedBy(rb);
+        }
+
+        m.setAssignedTo(rs.getString("assignedTo"));
+
+        return m;
+    };
+
+    public List<MaintenanceLedger> findAll(String search) {
+        if (search != null && !search.isBlank()) {
+            return jdbcTemplate.query("CALL sp_maintenance_search(?)", MAINT_MAPPER, search.trim());
+        }
+        return jdbcTemplate.query("CALL sp_maintenance_get_all()", MAINT_MAPPER);
     }
 
     public List<MaintenanceLedger> findByAsset(Long assetId) {
-        return maintenanceLedgerRepository.findByAsset_IdAndIsDeletedFalse(assetId);
+        return jdbcTemplate.query("CALL sp_maintenance_get_by_asset(?)", MAINT_MAPPER, assetId);
     }
 
     public MaintenanceLedger findById(Long id) {
-        return maintenanceLedgerRepository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Maintenance record not found: " + id));
+        List<MaintenanceLedger> list = jdbcTemplate.query(
+            "CALL sp_maintenance_get_by_id(?)", MAINT_MAPPER, id);
+        if (list.isEmpty()) throw new ResourceNotFoundException("Maintenance record not found: " + id);
+        return list.get(0);
     }
 
     public MaintenanceLedger create(MaintenanceLedgerRequest req) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User recorder = userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
-        Asset asset = assetRepository.findByIdAndIsDeletedFalse(req.getAssetId())
-                .orElseThrow(() -> new ResourceNotFoundException("Asset not found: " + req.getAssetId()));
+        Long recorderId = getUserIdByUsername(username);
 
-        MaintenanceLedger m = MaintenanceLedger.builder()
-                .asset(asset)
-                .maintenanceType(MaintenanceLedger.MaintenanceType.valueOf(req.getMaintenanceType()))
-                .findings(req.getFindings())
-                .actionsTaken(req.getActionsTaken())
-                .maintenanceDate(req.getMaintenanceDate())
-                .cost(req.getCost())
-                .status(MaintenanceLedger.MaintenanceStatus.valueOf(req.getStatus()))
-                .recordedBy(recorder)
-                .build();
+        Long newId = SpHelper.callWithOutLong(jdbcTemplate,
+            "CALL sp_maintenance_create(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            req.getAssetId(),
+            req.getMaintenanceType(),
+            req.getFindings(),
+            req.getActionsTaken(),
+            req.getAssignedTo(),
+            req.getMaintenanceDate(),
+            req.getCost(),
+            req.getStatus(),
+            recorderId != null ? recorderId.intValue() : 0);
 
-        if (req.getAssignedToId() != null) {
-            m.setAssignedTo(userRepository.findById(req.getAssignedToId()).orElse(null));
-        }
-
-        MaintenanceLedger saved = maintenanceLedgerRepository.save(m);
-        auditLogService.log("MAINTENANCE_CREATED", "Maintenance", saved.getId(), "maintenance",
-                "Maintenance for asset: " + asset.getPropertyNumber());
+        MaintenanceLedger saved = findById(newId);
+        auditLogService.log("MAINTENANCE_CREATED", "Maintenance", newId, "maintenance",
+            "Maintenance for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : req.getAssetId()));
         return saved;
     }
 
     public MaintenanceLedger update(Long id, MaintenanceLedgerRequest req) {
-        MaintenanceLedger m = findById(id);
-        m.setMaintenanceType(MaintenanceLedger.MaintenanceType.valueOf(req.getMaintenanceType()));
-        m.setFindings(req.getFindings());
-        m.setActionsTaken(req.getActionsTaken());
-        m.setMaintenanceDate(req.getMaintenanceDate());
-        m.setCost(req.getCost());
-        m.setStatus(MaintenanceLedger.MaintenanceStatus.valueOf(req.getStatus()));
-        if (req.getAssignedToId() != null) {
-            m.setAssignedTo(userRepository.findById(req.getAssignedToId()).orElse(null));
-        }
-        MaintenanceLedger saved = maintenanceLedgerRepository.save(m);
-        auditLogService.log("MAINTENANCE_UPDATED", "Maintenance", saved.getId(), "maintenance",
-                "Updated maintenance for asset: " + m.getAsset().getPropertyNumber());
+        findById(id); // throws if not found
+        jdbcTemplate.update("CALL sp_maintenance_update(?, ?, ?, ?, ?, ?, ?, ?)",
+            id,
+            req.getMaintenanceType(),
+            req.getFindings(),
+            req.getActionsTaken(),
+            req.getAssignedTo(),
+            req.getMaintenanceDate(),
+            req.getCost(),
+            req.getStatus());
+        MaintenanceLedger saved = findById(id);
+        auditLogService.log("MAINTENANCE_UPDATED", "Maintenance", id, "maintenance",
+            "Updated maintenance for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : ""));
         return saved;
     }
 
     public void delete(Long id, String deleteReason) {
         MaintenanceLedger m = findById(id);
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User deleter = userRepository.findByUsernameIgnoreCase(username).orElse(m.getRecordedBy());
-
-        DeletedMaintenance snapshot = DeletedMaintenance.builder()
-                .maintenanceId(m.getId())
-                .assetId(m.getAsset().getId())
-                .propertyNumber(m.getAsset().getPropertyNumber())
-                .assetDescription(m.getAsset().getDescription())
-                .maintenanceType(m.getMaintenanceType().name())
-                .findings(m.getFindings())
-                .actionsTaken(m.getActionsTaken())
-                .assignedToUserId(m.getAssignedTo() != null ? m.getAssignedTo().getId() : null)
-                .assignedToName(m.getAssignedTo() != null ? m.getAssignedTo().getFullName() : null)
-                .maintenanceDate(m.getMaintenanceDate())
-                .cost(m.getCost())
-                .status(m.getStatus().name())
-                .recordedByUserId(m.getRecordedBy().getId())
-                .recordedByName(m.getRecordedBy().getFullName())
-                .originalCreatedAt(m.getCreatedAt())
-                .deletedByUserId(deleter.getId())
-                .deletedByUsername(deleter.getUsername())
-                .deleteReason(deleteReason)
-                .build();
-        deletedMaintenanceRepository.save(snapshot);
-
-        m.setIsDeleted(true);
-        m.setDeletedAt(LocalDateTime.now());
-        m.setDeletedBy(deleter.getId());
-        m.setDeleteReason(deleteReason);
-        maintenanceLedgerRepository.save(m);
-
+        Long deleterId = getUserIdByUsername(username);
+        jdbcTemplate.update("CALL sp_maintenance_soft_delete(?, ?, ?, ?)",
+            id,
+            deleterId != null ? deleterId.intValue() : 0,
+            username,
+            deleteReason);
         auditLogService.log("MAINTENANCE_DELETED", "Maintenance", id, "maintenance",
-                "Deleted maintenance for asset: " + m.getAsset().getPropertyNumber());
+            "Deleted maintenance for asset: " + (m.getAsset() != null ? m.getAsset().getPropertyNumber() : ""));
+    }
+
+    private Long getUserIdByUsername(String username) {
+        List<Long> ids = jdbcTemplate.query(
+            "CALL sp_users_get_by_username(?)", (rs, rn) -> rs.getLong("id"), username);
+        return ids.isEmpty() ? null : ids.get(0);
     }
 }

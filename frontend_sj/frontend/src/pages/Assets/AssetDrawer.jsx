@@ -54,8 +54,8 @@ export default function AssetDrawer({ asset, onClose, onEdit, isAdmin }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-30 bg-zinc-950/40" onClick={onClose} />
-      <aside className="fixed right-0 top-0 bottom-0 z-40 w-full max-w-lg bg-white dark:bg-zinc-950 border-l border-slate-200 dark:border-zinc-800 flex flex-col shadow-2xl overflow-hidden">
+      <div className="fixed inset-0 z-30 bg-zinc-950/40" style={{ top: '60px' }} onClick={onClose} />
+      <aside className="fixed right-0 bottom-0 z-40 w-full max-w-lg bg-white dark:bg-zinc-950 border-l border-slate-200 dark:border-zinc-800 flex flex-col shadow-2xl overflow-hidden" style={{ top: '60px' }}>
         {/* Header */}
         <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-200 dark:border-zinc-800 flex-shrink-0">
           <div className="flex-1 min-w-0">

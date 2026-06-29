@@ -1,13 +1,12 @@
 package com.sanjose.inventory.service;
 
+import com.sanjose.inventory.config.SpHelper;
 import com.sanjose.inventory.dto.UserRequest;
 import com.sanjose.inventory.dto.UserResponse;
-import com.sanjose.inventory.entity.Office;
-import com.sanjose.inventory.entity.User;
 import com.sanjose.inventory.exception.ResourceNotFoundException;
-import com.sanjose.inventory.repository.OfficeRepository;
-import com.sanjose.inventory.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,91 +18,87 @@ import java.util.List;
 @Transactional
 public class UserService {
 
-    private final UserRepository userRepository;
-    private final OfficeRepository officeRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
 
-    public List<UserResponse> findAll() {
-        return userRepository.findAll().stream().map(this::toResponse).toList();
+    private static final RowMapper<UserResponse> USER_MAPPER = (rs, rn) ->
+        UserResponse.builder()
+            .id(rs.getLong("id"))
+            .username(rs.getString("username"))
+            .fullName(rs.getString("fullName"))
+            .role(rs.getString("role"))
+            .isActive(rs.getObject("isActive", Boolean.class))
+            .officeId(rs.getObject("office_id", Long.class))
+            .officeName(rs.getString("office_officeName"))
+            .build();
+
+    public List<UserResponse> findAll(String search) {
+        if (search != null && !search.isBlank()) {
+            return jdbcTemplate.query("CALL sp_users_search(?)", USER_MAPPER, search.trim());
+        }
+        return jdbcTemplate.query("CALL sp_users_get_all()", USER_MAPPER);
     }
 
     public UserResponse findById(Long id) {
-        return toResponse(userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id)));
+        List<UserResponse> list = jdbcTemplate.query("CALL sp_users_get_by_id(?)", USER_MAPPER, id);
+        if (list.isEmpty()) throw new ResourceNotFoundException("User not found: " + id);
+        return list.get(0);
     }
 
     public UserResponse create(UserRequest req) {
-        if (userRepository.existsByUsernameIgnoreCase(req.getUsername()))
+        Boolean exists = SpHelper.callWithOutBoolean(jdbcTemplate,
+            "CALL sp_users_username_exists(?, ?)", req.getUsername());
+        if (Boolean.TRUE.equals(exists)) {
             throw new IllegalArgumentException("Username already exists: " + req.getUsername());
-
-        User user = User.builder()
-                .username(req.getUsername())
-                .password(passwordEncoder.encode(req.getPassword() != null ? req.getPassword() : "changeme123"))
-                .fullName(req.getFullName())
-                .role(req.getRole().toUpperCase())
-                .isActive(req.getIsActive() != null ? req.getIsActive() : true)
-                .build();
-
-        if (req.getOfficeId() != null) {
-            Office office = officeRepository.findById(req.getOfficeId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Office not found: " + req.getOfficeId()));
-            user.setOffice(office);
         }
-
-        User saved = userRepository.save(user);
-        auditLogService.log("USER_CREATED", "Users", saved.getId(), "user", "Created: " + saved.getUsername());
-        return toResponse(saved);
+        String hash = passwordEncoder.encode(
+            req.getPassword() != null && !req.getPassword().isBlank() ? req.getPassword() : "changeme123");
+        Long newId = SpHelper.callWithOutLong(jdbcTemplate,
+            "CALL sp_users_create(?, ?, ?, ?, ?, ?, ?)",
+            req.getUsername(), hash, req.getFullName(),
+            req.getRole() != null ? req.getRole().toUpperCase() : "STAFF",
+            req.getOfficeId() != null ? req.getOfficeId().intValue() : 0,
+            req.getIsActive() != null ? req.getIsActive() : true);
+        UserResponse saved = findById(newId);
+        auditLogService.log("USER_CREATED", "Users", newId, "user", "Created: " + saved.getUsername());
+        return saved;
     }
 
     public UserResponse update(Long id, UserRequest req) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
-
-        if (req.getFullName() != null) user.setFullName(req.getFullName());
-        if (req.getRole() != null) user.setRole(req.getRole().toUpperCase());
-        if (req.getIsActive() != null) user.setIsActive(req.getIsActive());
-        if (req.getPassword() != null && !req.getPassword().isBlank()) {
-            user.setPassword(passwordEncoder.encode(req.getPassword()));
-        }
-        if (req.getOfficeId() != null) {
-            Office office = officeRepository.findById(req.getOfficeId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Office not found: " + req.getOfficeId()));
-            user.setOffice(office);
-        } else if (req.getOfficeId() == null && req.getFullName() != null) {
-            user.setOffice(null);
-        }
-
-        User saved = userRepository.save(user);
-        auditLogService.log("USER_UPDATED", "Users", saved.getId(), "user", "Updated: " + saved.getUsername());
-        return toResponse(saved);
+        UserResponse existing = findById(id);
+        String hash = (req.getPassword() != null && !req.getPassword().isBlank())
+            ? passwordEncoder.encode(req.getPassword()) : null;
+        jdbcTemplate.update("CALL sp_users_update(?, ?, ?, ?, ?, ?)",
+            id,
+            req.getFullName() != null ? req.getFullName() : existing.getFullName(),
+            req.getRole() != null ? req.getRole().toUpperCase() : existing.getRole(),
+            req.getOfficeId() != null ? req.getOfficeId().intValue() : 0,
+            req.getIsActive() != null ? req.getIsActive() : existing.getIsActive(),
+            hash);
+        UserResponse saved = findById(id);
+        auditLogService.log("USER_UPDATED", "Users", id, "user", "Updated: " + saved.getUsername());
+        return saved;
     }
 
     public void delete(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
-        userRepository.delete(user);
+        UserResponse user = findById(id);
+        jdbcTemplate.update("CALL sp_users_delete(?)", id);
         auditLogService.log("USER_DELETED", "Users", id, "user", "Deleted: " + user.getUsername());
     }
 
     public void changePassword(String username, String currentPassword, String newPassword) {
-        User user = userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
-        if (!passwordEncoder.matches(currentPassword, user.getPassword()))
+        List<Object[]> rows = jdbcTemplate.query(
+            "CALL sp_users_get_by_username(?)",
+            (rs, rn) -> new Object[]{ rs.getLong("id"), rs.getString("password") },
+            username);
+        if (rows.isEmpty()) throw new ResourceNotFoundException("User not found: " + username);
+        Long userId = (Long) rows.get(0)[0];
+        String storedHash = (String) rows.get(0)[1];
+        if (!passwordEncoder.matches(currentPassword, storedHash)) {
             throw new IllegalArgumentException("Current password is incorrect");
-        user.setPassword(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
-    }
-
-    private UserResponse toResponse(User u) {
-        return UserResponse.builder()
-                .id(u.getId())
-                .username(u.getUsername())
-                .fullName(u.getFullName())
-                .role(u.getRole())
-                .officeId(u.getOffice() != null ? u.getOffice().getId() : null)
-                .officeName(u.getOffice() != null ? u.getOffice().getOfficeName() : null)
-                .isActive(u.getIsActive())
-                .build();
+        }
+        jdbcTemplate.update("CALL sp_users_change_password(?, ?)",
+            userId, passwordEncoder.encode(newPassword));
     }
 }

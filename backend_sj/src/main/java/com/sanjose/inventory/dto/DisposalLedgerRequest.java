@@ -11,5 +11,5 @@ public class DisposalLedgerRequest {
     private String recommendedMethod; // AUCTION | DESTRUCTION | DONATION | TRANSFER
     private String disposalStatus;    // PENDING | APPROVED | COMPLETED
     private LocalDate inspectionDate;
-    private Long approvedById;
+    private String approvedBy;
 }

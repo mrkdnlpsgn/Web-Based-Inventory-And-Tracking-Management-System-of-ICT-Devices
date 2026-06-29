@@ -18,7 +18,7 @@ public class MaintenanceLedgerController {
     private final MaintenanceLedgerService maintenanceLedgerService;
 
     @GetMapping
-    public List<MaintenanceLedger> getAll() { return maintenanceLedgerService.findAll(); }
+    public List<MaintenanceLedger> getAll(@RequestParam(required = false) String search) { return maintenanceLedgerService.findAll(search); }
 
     @GetMapping("/{id}")
     public MaintenanceLedger getById(@PathVariable Long id) {

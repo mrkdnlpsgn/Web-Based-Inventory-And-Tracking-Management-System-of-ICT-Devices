@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useToast } from '../../context/ToastContext'
+import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -54,17 +55,13 @@ function Disposal() {
     if (assetId) setAssetFilter(assetId)
   }, [location.search])
 
-  const load = useCallback(async () => {
+  const debouncedSearch = useDebounce(search, 300)
+
+  const fetchRecords = useCallback(async (q = '') => {
     setLoading(true)
     try {
-      const [dispRes, assetRes, userRes] = await Promise.all([
-        getDisposal().catch(() => ({ data: [] })),
-        getAssets().catch(() => ({ data: [] })),
-        getUsers().catch(() => ({ data: [] })),
-      ])
-      setRecords(dispRes.data)
-      setAssets(assetRes.data)
-      setUsers(userRes.data)
+      const { data } = await getDisposal(q)
+      setRecords(data)
     } catch {
       toast.show('Failed to load disposal records.', 'error')
     } finally {
@@ -72,8 +69,19 @@ function Disposal() {
     }
   }, [toast])
 
-  useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(1) }, [search, filterStatus, filterMethod, assetFilter])
+  const load = useCallback(() => {
+    Promise.all([getAssets().catch(() => ({ data: [] })), getUsers().catch(() => ({ data: [] }))])
+      .then(([assetRes, userRes]) => { setAssets(assetRes.data); setUsers(userRes.data) })
+    fetchRecords(search)
+  }, [fetchRecords, search]) // eslint-disable-line
+
+  useEffect(() => {
+    Promise.all([getAssets().catch(() => ({ data: [] })), getUsers().catch(() => ({ data: [] }))])
+      .then(([assetRes, userRes]) => { setAssets(assetRes.data); setUsers(userRes.data) })
+  }, [])
+
+  useEffect(() => { fetchRecords(debouncedSearch) }, [debouncedSearch, fetchRecords])
+  useEffect(() => { setPage(1) }, [debouncedSearch, filterStatus, filterMethod, assetFilter])
 
   const handleCreate = async (payload) => {
     const { data } = await createDisposal(payload)
@@ -105,17 +113,9 @@ function Disposal() {
       if (filterStatus && r.disposalStatus !== filterStatus) return false
       if (filterMethod && r.recommendedMethod !== filterMethod) return false
       if (assetFilter && String(r.asset?.id) !== assetFilter) return false
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        return (
-          r.asset?.propertyNumber?.toLowerCase().includes(q) ||
-          r.asset?.description?.toLowerCase().includes(q) ||
-          r.reason?.toLowerCase().includes(q)
-        )
-      }
       return true
     })
-  }, [records, search, filterStatus, filterMethod, assetFilter])
+  }, [records, filterStatus, filterMethod, assetFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

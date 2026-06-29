@@ -17,7 +17,7 @@ public class OfficeController {
     private final OfficeService officeService;
 
     @GetMapping
-    public List<Office> getAll() { return officeService.findAll(); }
+    public List<Office> getAll(@RequestParam(required = false) String search) { return officeService.findAll(search); }
 
     @GetMapping("/{id}")
     public Office getById(@PathVariable Long id) { return officeService.findById(id); }

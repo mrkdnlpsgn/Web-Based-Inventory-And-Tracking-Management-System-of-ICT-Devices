@@ -1,6 +1,8 @@
 import api from './api';
 
-export const getMaintenance        = ()          => api.get('/maintenance');
+export const getMaintenance        = (search = '') => search.trim()
+  ? api.get('/maintenance', { params: { search: search.trim() } })
+  : api.get('/maintenance');
 export const getMaintenanceById    = (id)        => api.get(`/maintenance/${id}`);
 export const getMaintenanceByAsset = (assetId)   => api.get(`/maintenance/asset/${assetId}`);
 export const createMaintenance     = (data)      => api.post('/maintenance', data);
