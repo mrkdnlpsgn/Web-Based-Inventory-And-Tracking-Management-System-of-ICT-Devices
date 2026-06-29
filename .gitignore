@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+frontend_sj/frontend/node_modules/
+
+# Build output
+dist/
+frontend_sj/frontend/dist/
+
+# Backend build
+backend_sj/target/
+backend_sj/bin/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Backend credentials — keep secrets off GitHub
+backend_sj/src/main/resources/application.properties
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+.project
+.settings/
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db

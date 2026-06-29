@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Performance Scaling Curve - SJ Inventory System</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #e8e8e8;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .download-btn {
+            margin-bottom: 20px;
+            padding: 10px 24px;
+            background: #1a1a1a;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .download-btn:hover { background: #444; }
+
+        #diagram {
+            background: #fff;
+            width: 820px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .title-bar {
+            background: #1a1a1a;
+            color: #fff;
+            text-align: center;
+            padding: 18px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .subtitle {
+            background: #f5f5f5;
+            text-align: center;
+            padding: 10px;
+            font-size: 0.82rem;
+            color: #555;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .chart-container {
+            padding: 30px 40px 20px;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 380px;
+        }
+
+        .zone-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            padding: 0 40px 30px;
+        }
+        .zone-card {
+            border: 2px solid #1a1a1a;
+            background: #fff;
+            padding: 12px 14px;
+            box-shadow: 3px 3px 0 #1a1a1a;
+        }
+        .zone-card.danger {
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .zone-label {
+            font-size: 0.65rem;
+            letter-spacing: 1.5px;
+            color: #888;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .zone-card.danger .zone-label { color: #aaa; }
+
+        .zone-name {
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .zone-stats {
+            font-size: 0.74rem;
+            line-height: 1.55;
+            font-family: 'Consolas', monospace;
+        }
+        .zone-card.danger .zone-stats { color: #ddd; }
+
+        .narrative {
+            border-top: 1px solid #eee;
+            padding: 30px 40px;
+        }
+        .narrative h3 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            border-left: 4px solid #1a1a1a;
+            padding-left: 10px;
+        }
+        .narrative h3:not(:first-child) { margin-top: 22px; }
+        .narrative p {
+            font-size: 0.86rem;
+            line-height: 1.7;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .narrative code {
+            background: #1a1a1a;
+            color: #fff;
+            padding: 1px 6px;
+            border-radius: 2px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.78rem;
+        }
+        .narrative strong { color: #1a1a1a; }
+
+        .legend-row {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            font-size: 0.78rem;
+            color: #555;
+            padding: 0 0 14px;
+        }
+        .legend-row span { display: flex; align-items: center; gap: 6px; }
+        .legend-line {
+            display: inline-block;
+            width: 22px;
+            height: 2px;
+        }
+        .legend-line.solid { background: #1a1a1a; }
+        .legend-line.dashed {
+            border-top: 2px dashed #888;
+            height: 0;
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #1a1a1a;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <button class="download-btn" onclick="downloadPNG()">⬇ Download as PNG</button>
+
+    <div id="diagram">
+        <div class="title-bar">PERFORMANCE SCALING CURVE</div>
+        <div class="subtitle">SJ Inventory & Tracking Management System &mdash; Predicted System Behavior under Load</div>
+
+        <div class="chart-container">
+            <div class="legend-row">
+                <span><span class="legend-line solid"></span> Predicted Response Time</span>
+                <span><span class="legend-line dashed"></span> Acceptable Threshold (1s)</span>
+                <span><span class="legend-dot"></span> Break Point</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="perfChart"></canvas>
+            </div>
+        </div>
+
+        <div class="zone-grid">
+            <div class="zone-card">
+                <div class="zone-label">ZONE 01</div>
+                <div class="zone-name">NORMAL</div>
+                <div class="zone-stats">
+                    Users: 1&ndash;50<br>
+                    Time: &lt; 300ms<br>
+                    Status: Optimal
+                </div>
+            </div>
+            <div class="zone-card">
+                <div class="zone-label">ZONE 02</div>
+                <div class="zone-name">ACCEPTABLE</div>
+                <div class="zone-stats">
+                    Users: 50&ndash;150<br>
+                    Time: 300ms&ndash;1s<br>
+                    Status: Stable
+                </div>
+            </div>
+            <div class="zone-card danger">
+                <div class="zone-label">ZONE 03</div>
+                <div class="zone-name">★ BREAK POINT</div>
+                <div class="zone-stats">
+                    Users: ~150&ndash;200<br>
+                    Time: 1&ndash;3s<br>
+                    Status: Degraded
+                </div>
+            </div>
+            <div class="zone-card">
+                <div class="zone-label">ZONE 04</div>
+                <div class="zone-name">FAILURE</div>
+                <div class="zone-stats">
+                    Users: 500+<br>
+                    Time: Timeout<br>
+                    Status: Crash
+                </div>
+            </div>
+        </div>
+
+        <div class="narrative">
+            <h3>A. The Graph</h3>
+            <p>
+                The X-axis represents the <strong>number of concurrent users</strong> accessing the
+                system simultaneously, while the Y-axis represents the <strong>average response time
+                in seconds</strong>. The curve shows how the SJ Inventory System's single-server setup
+                is predicted to behave as load increases &mdash; remaining flat under normal usage,
+                gradually rising in the acceptable zone, then sharply degrading at the break point
+                before reaching failure conditions.
+            </p>
+
+            <h3>B. The Break Point</h3>
+            <p>
+                The <strong>break point</strong> is predicted to occur at approximately
+                <strong>150&ndash;200 concurrent users</strong>. At this point, the database
+                connection pool becomes saturated, JPA's eager-fetching of <code>DeviceRecord</code>
+                collections triggers N+1 query patterns, and the single Spring Boot instance can no
+                longer maintain sub-second response times. Beyond 500 users, the system would reach
+                <strong>failure conditions</strong> &mdash; request timeouts and dropped connections.
+            </p>
+
+            <h3>C. The Narrative</h3>
+            <p>
+                Based on our target users identified in Chapter 1 &mdash; the San Jose Municipal Hall
+                ICT Division staff (~5&ndash;10 users), department heads viewing inventory
+                (~10&ndash;20 users), and peak audit-period concurrency (~30&ndash;50 users) &mdash;
+                the system's break point at ~150&ndash;200 users sits <strong>well above</strong>
+                actual demand, providing a comfortable safety margin for normal operations.
+            </p>
+            <p>
+                However, this prediction directly justifies the <strong>scalability strategy</strong>
+                planned in Material 1. The <strong>stateless JWT authentication</strong> design means
+                we can horizontally scale by adding more Spring Boot instances behind a
+                <strong>Load Balancer</strong> (Nginx) without session affinity issues. The
+                <strong>MySQL database</strong> can be configured with read replicas for the
+                <strong>High Availability</strong> strategy &mdash; particularly during COA audit
+                periods when reporting queries grow heavy.
+            </p>
+            <p>
+                With a load balancer distributing traffic across 2&ndash;3 application servers, the
+                break point would shift past <strong>1000 concurrent users</strong> &mdash; more than
+                sufficient if the system is later adopted by other municipalities in Batangas
+                province. The <code>RateLimitingFilter</code> already in place also protects against
+                brute-force attacks that could artificially spike load before legitimate scaling
+                decisions are needed.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('perfChart').getContext('2d');
+
+        const userCounts = [10, 30, 50, 75, 100, 125, 150, 175, 200, 250, 300, 400, 500, 700, 1000];
+        const responseTimes = [0.15, 0.20, 0.28, 0.40, 0.55, 0.75, 1.00, 1.45, 2.10, 3.20, 4.50, 7.00, 10.5, 18.0, 30.0];
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: userCounts,
+                datasets: [
+                    {
+                        label: 'Response Time',
+                        data: responseTimes,
+                        borderColor: '#1a1a1a',
+                        backgroundColor: 'rgba(26, 26, 26, 0.08)',
+                        borderWidth: 2.5,
+                        tension: 0.35,
+                        fill: true,
+                        pointBackgroundColor: '#1a1a1a',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: 'Acceptable Threshold (1s)',
+                        data: userCounts.map(() => 1.0),
+                        borderColor: '#888',
+                        borderDash: [6, 4],
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false
+                    },
+                    {
+                        label: 'Break Point',
+                        data: userCounts.map((u, i) => (u === 175 ? responseTimes[i] : null)),
+                        borderColor: '#1a1a1a',
+                        backgroundColor: '#fff',
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#1a1a1a',
+                        pointBorderWidth: 3,
+                        pointRadius: 9,
+                        pointHoverRadius: 11,
+                        showLine: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.y.toFixed(2)}s @ ${ctx.label} users`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Number of Concurrent Users',
+                            color: '#1a1a1a',
+                            font: { size: 12, weight: '700' }
+                        },
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: { color: '#555', font: { size: 11 } }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Response Time (seconds)',
+                            color: '#1a1a1a',
+                            font: { size: 12, weight: '700' }
+                        },
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: {
+                            color: '#555',
+                            font: { size: 11 },
+                            callback: (v) => v + 's'
+                        },
+                        suggestedMax: 12
+                    }
+                }
+            }
+        });
+
+        function downloadPNG() {
+            const diagram = document.getElementById('diagram');
+            html2canvas(diagram, {
+                scale: 2,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'sj_inventory_performance_scaling_curve.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>

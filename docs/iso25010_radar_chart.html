@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISO 25010 Quality Radar Chart - SJ Inventory System</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 1.6rem;
+            margin-bottom: 6px;
+            color: #222;
+            text-align: center;
+            font-weight: 700;
+        }
+        h2 {
+            font-size: 0.95rem;
+            font-weight: 400;
+            color: #777;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .chart-container {
+            width: 100%;
+            max-width: 620px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 30px 30px 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+        }
+        .legend-row {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 16px;
+            font-size: 0.82rem;
+            color: #888;
+        }
+        .legend-row span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+        .dot-project { background: rgba(90, 70, 160, 0.5); }
+        .dot-baseline { background: rgba(180, 170, 210, 0.35); }
+
+        .score-grid {
+            margin-top: 24px;
+            width: 100%;
+            max-width: 620px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .score-card {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 16px 14px;
+            color: #fff;
+        }
+        .score-card .label {
+            font-size: 0.78rem;
+            color: #bbb;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .score-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .score-card .value span {
+            font-size: 0.85rem;
+            font-weight: 400;
+            color: #888;
+        }
+
+        .narrative-box {
+            margin-top: 24px;
+            width: 100%;
+            max-width: 620px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+        }
+        .narrative-box h3 {
+            font-size: 0.95rem;
+            color: #555;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .narrative-box p {
+            font-size: 0.88rem;
+            line-height: 1.65;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>ISO 25010: The Quality Radar</h1>
+    <h2>San Jose Municipal Hall &mdash; Web-Based ICT Inventory & Tracking System</h2>
+
+    <div class="chart-container">
+        <canvas id="radarChart"></canvas>
+        <div class="legend-row">
+            <span><span class="legend-dot dot-project"></span> Project priority score (0&ndash;100)</span>
+            <span><span class="legend-dot dot-baseline"></span> Baseline reference (60)</span>
+        </div>
+    </div>
+
+    <div class="score-grid">
+        <div class="score-card">
+            <div class="label">Security</div>
+            <div class="value">95 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Reliability</div>
+            <div class="value">90 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Functional Suitability</div>
+            <div class="value">90 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Performance Efficiency</div>
+            <div class="value">85 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Usability</div>
+            <div class="value">80 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Compatibility</div>
+            <div class="value">75 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Maintainability</div>
+            <div class="value">70 <span>/ 100</span></div>
+        </div>
+        <div class="score-card">
+            <div class="label">Portability</div>
+            <div class="value">70 <span>/ 100</span></div>
+        </div>
+    </div>
+
+    <div class="narrative-box">
+        <h3>A. The Spike</h3>
+        <p>
+            For this local e-government web-based inventory and tracking management system,
+            <strong>Security</strong> and <strong>Reliability</strong> are prioritized at the highest
+            level because the system handles sensitive ICT equipment records, accountable person
+            information, and government asset data that must remain accurate and protected at all
+            times. <strong>Functional Suitability</strong> is also highly emphasized to ensure the
+            system correctly manages inventory records, tracks equipment movement through QR codes,
+            and generates accurate reports for COA (Commission on Audit) compliance.
+            <strong>Performance Efficiency</strong> and <strong>Usability</strong> remain important
+            to allow quick and smooth processing of inventory operations at the municipal hall,
+            though they are slightly less critical than data protection and accuracy.
+            <strong>Compatibility</strong> is given moderate priority since the system integrates
+            with external services such as PhilSMS for notifications and Gmail SMTP for email alerts.
+            Other factors like <strong>Maintainability</strong> and <strong>Portability</strong> are
+            given moderate priority since the system is primarily used in a fixed local government
+            setting at the San Jose Municipal Hall ICT Division.
+        </p>
+    </div>
+
+    <div class="narrative-box">
+        <h3>B. The Narrative</h3>
+        <p>
+            The system prioritizes <strong>Security</strong> and <strong>Reliability</strong> because
+            it handles sensitive government ICT equipment records, accountable personnel details
+            (including contact numbers and emails), and official inventory data where data integrity
+            and protection are critical. The system enforces JWT-based authentication, BCrypt password
+            hashing, role-based access control (Admin and Staff roles), rate limiting on login
+            attempts, account lockout policies, and comprehensive audit logging of all operations.
+            <strong>Functional Suitability</strong> is also high to ensure the inventory management,
+            QR-based equipment tracking, device record linking, and SMS/email notification features
+            accurately reflect equipment details and movement history during inventory audits and
+            day-to-day operations. Other factors like <strong>Usability</strong> and
+            <strong>Performance Efficiency</strong> remain important but slightly lower since the
+            system mainly supports internal ICT asset management within a single municipal hall
+            rather than public-facing digital services or high-traffic remote access scenarios.
+        </p>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('radarChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: [
+                    'Functional Suitability',
+                    'Performance Efficiency',
+                    'Compatibility',
+                    'Usability',
+                    'Reliability',
+                    'Security',
+                    'Maintainability',
+                    'Portability'
+                ],
+                datasets: [
+                    {
+                        label: 'Project priority score',
+                        data: [90, 85, 75, 80, 90, 95, 70, 70],
+                        backgroundColor: 'rgba(90, 70, 160, 0.2)',
+                        borderColor: 'rgba(90, 70, 160, 0.8)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(90, 70, 160, 0.9)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    },
+                    {
+                        label: 'Baseline reference (60)',
+                        data: [60, 60, 60, 60, 60, 60, 60, 60],
+                        backgroundColor: 'rgba(180, 170, 210, 0.15)',
+                        borderColor: 'rgba(180, 170, 210, 0.5)',
+                        borderWidth: 1.5,
+                        borderDash: [4, 4],
+                        pointBackgroundColor: 'rgba(180, 170, 210, 0.6)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        min: 0,
+                        ticks: {
+                            stepSize: 20,
+                            color: '#aaa',
+                            backdropColor: 'transparent',
+                            font: { size: 11 }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.08)'
+                        },
+                        angleLines: {
+                            color: 'rgba(0, 0, 0, 0.08)'
+                        },
+                        pointLabels: {
+                            color: '#444',
+                            font: { size: 12.5, weight: '600' }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

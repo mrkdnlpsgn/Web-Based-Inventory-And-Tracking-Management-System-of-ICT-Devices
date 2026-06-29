@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-slate-900 dark:text-zinc-100 antialiased;
+  }
+}
+
+/* ── Dark mode scrollbar ─────────────────────────────────────────────────────
+   Matches the dark track / gray thumb / arrow-button style in the design.
+   Webkit handles Chrome/Edge; scrollbar-color handles Firefox.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Scrollbar dimensions */
+.dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* Track — near-black, slight zinc tint */
+.dark ::-webkit-scrollbar-track {
+  background: oklch(7% 0.003 248);
+}
+
+/* Corner where horizontal and vertical scrollbars meet */
+.dark ::-webkit-scrollbar-corner {
+  background: oklch(7% 0.003 248);
+}
+
+/* Thumb — medium gray, square corners to match screenshot */
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(40% 0.005 248);
+  border-radius: 1px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(48% 0.005 248);
+}
+
+.dark ::-webkit-scrollbar-thumb:active {
+  background: oklch(54% 0.005 248);
+}
+
+/* Arrow buttons — slightly lighter than track, with triangle indicators */
+.dark ::-webkit-scrollbar-button:single-button {
+  background-color: oklch(18% 0.003 248);
+  display: block;
+  height: 13px;
+  width: 10px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.dark ::-webkit-scrollbar-button:single-button:hover {
+  background-color: oklch(26% 0.004 248);
+}
+
+/* Up arrow ▲ */
+.dark ::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4'%3E%3Cpath fill='%23888' d='M3 0L6 4H0z'/%3E%3C/svg%3E");
+}
+
+/* Down arrow ▼ */
+.dark ::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4'%3E%3Cpath fill='%23888' d='M3 4L0 0H6z'/%3E%3C/svg%3E");
+}
+
+/* Left arrow ◀ */
+.dark ::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='6'%3E%3Cpath fill='%23888' d='M0 3L4 0V6z'/%3E%3C/svg%3E");
+}
+
+/* Right arrow ▶ */
+.dark ::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='6'%3E%3Cpath fill='%23888' d='M4 3L0 6V0z'/%3E%3C/svg%3E");
+}
+
+/* Firefox — scrollbar-color is inherited, applies to all scrollable children */
+.dark {
+  scrollbar-color: oklch(40% 0.005 248) oklch(7% 0.003 248);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

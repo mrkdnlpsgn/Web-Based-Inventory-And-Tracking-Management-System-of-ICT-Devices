@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3-Tier Architecture - SJ Inventory System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #e8e8e8;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .download-btn {
+            margin-bottom: 20px;
+            padding: 10px 24px;
+            background: #1a1a1a;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .download-btn:hover { background: #444; }
+
+        #diagram {
+            background: #fff;
+            width: 760px;
+            padding: 0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .title-bar {
+            background: #1a1a1a;
+            color: #fff;
+            text-align: center;
+            padding: 18px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .subtitle {
+            background: #f5f5f5;
+            text-align: center;
+            padding: 10px;
+            font-size: 0.82rem;
+            color: #555;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .canvas {
+            padding: 40px 50px 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Tier blocks */
+        .tier {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .tier-card {
+            width: 420px;
+            border: 2px solid #1a1a1a;
+            background: #fff;
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 4px 4px 0 #1a1a1a;
+        }
+
+        .tier-icon {
+            width: 56px;
+            height: 56px;
+            background: #1a1a1a;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            flex-shrink: 0;
+            letter-spacing: 0.5px;
+        }
+
+        .tier-info {
+            flex: 1;
+        }
+        .tier-num {
+            font-size: 0.7rem;
+            color: #888;
+            letter-spacing: 2px;
+            font-weight: 700;
+        }
+        .tier-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin: 2px 0 6px;
+        }
+        .tier-tech {
+            font-size: 0.78rem;
+            color: #555;
+            line-height: 1.5;
+        }
+        .tier-tech code {
+            background: #f0f0f0;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.74rem;
+            color: #1a1a1a;
+        }
+
+        /* Arrow */
+        .arrow {
+            width: 2px;
+            height: 50px;
+            background: #1a1a1a;
+            position: relative;
+            margin: 0;
+        }
+        .arrow::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 7px solid transparent;
+            border-top-color: #1a1a1a;
+        }
+        .arrow-label {
+            position: absolute;
+            top: 50%;
+            left: 14px;
+            transform: translateY(-50%);
+            background: #fff;
+            padding: 3px 10px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.72rem;
+            color: #1a1a1a;
+            border: 1px solid #1a1a1a;
+            white-space: nowrap;
+            border-radius: 2px;
+        }
+
+        /* Endpoints (start/end pills) */
+        .endpoint {
+            background: #1a1a1a;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        /* Side service tags */
+        .tier-with-side {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .side-services {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .side-services.left {
+            right: calc(50% + 220px);
+            align-items: flex-end;
+        }
+        .side-services.right {
+            left: calc(50% + 220px);
+            align-items: flex-start;
+        }
+
+        .side-tag {
+            font-size: 0.72rem;
+            font-family: 'Consolas', monospace;
+            color: #1a1a1a;
+            background: #fff;
+            border: 1px solid #1a1a1a;
+            padding: 4px 10px;
+            border-radius: 2px;
+            white-space: nowrap;
+            position: relative;
+        }
+        .side-tag.left::after {
+            content: '→';
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #1a1a1a;
+            font-weight: 700;
+        }
+        .side-tag.right::before {
+            content: '←';
+            position: absolute;
+            left: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #1a1a1a;
+            font-weight: 700;
+        }
+
+        .legend-bottom {
+            margin-top: 24px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            font-size: 0.72rem;
+            color: #666;
+            padding: 12px;
+            border-top: 1px solid #eee;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <button class="download-btn" onclick="downloadPNG()">⬇ Download as PNG</button>
+
+    <div id="diagram">
+        <div class="title-bar">3-TIER ARCHITECTURE</div>
+        <div class="subtitle">SJ Inventory & Tracking Management System &mdash; Data Flow</div>
+
+        <div class="canvas">
+
+            <!-- START: USER -->
+            <div class="endpoint">▶ USER &nbsp;·&nbsp; Browser</div>
+
+            <div class="arrow">
+                <span class="arrow-label">HTTPS Request</span>
+            </div>
+
+            <!-- TIER 1: PRESENTATION -->
+            <div class="tier-with-side">
+                <div class="tier-card">
+                    <div class="tier-icon">UI</div>
+                    <div class="tier-info">
+                        <div class="tier-num">TIER 01</div>
+                        <div class="tier-name">PRESENTATION</div>
+                        <div class="tier-tech">
+                            <code>React</code> &middot; <code>Vite</code> &middot; <code>Axios</code><br>
+                            User interface, forms, QR scanner
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arrow">
+                <span class="arrow-label">POST /api/equipment</span>
+            </div>
+
+            <!-- TIER 2: BUSINESS -->
+            <div class="tier-with-side">
+                <div class="side-services left">
+                    <div class="side-tag left">JWT Auth Filter</div>
+                    <div class="side-tag left">Rate Limiter</div>
+                    <div class="side-tag left">Bean Validation</div>
+                </div>
+
+                <div class="tier-card">
+                    <div class="tier-icon">⚙</div>
+                    <div class="tier-info">
+                        <div class="tier-num">TIER 02</div>
+                        <div class="tier-name">BUSINESS</div>
+                        <div class="tier-tech">
+                            <code>Spring Boot</code> &middot; <code>Java 17</code><br>
+                            Auth, validation, business logic
+                        </div>
+                    </div>
+                </div>
+
+                <div class="side-services right">
+                    <div class="side-tag right">Audit Log</div>
+                    <div class="side-tag right">PhilSMS</div>
+                    <div class="side-tag right">Gmail SMTP</div>
+                </div>
+            </div>
+
+            <div class="arrow">
+                <span class="arrow-label">JPA / Hibernate</span>
+            </div>
+
+            <!-- TIER 3: DATA -->
+            <div class="tier-with-side">
+                <div class="tier-card">
+                    <div class="tier-icon">DB</div>
+                    <div class="tier-info">
+                        <div class="tier-num">TIER 03</div>
+                        <div class="tier-name">DATA</div>
+                        <div class="tier-tech">
+                            <code>MySQL 8</code> &middot; <code>Hibernate ORM</code><br>
+                            Inventory, devices, audit logs, users
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arrow">
+                <span class="arrow-label">HTTP 201 Created</span>
+            </div>
+
+            <!-- END -->
+            <div class="endpoint">■ RESPONSE</div>
+
+        </div>
+
+        <div class="legend-bottom">
+            <span>━━ Primary data path</span>
+            <span>→ Side service call</span>
+        </div>
+    </div>
+
+    <script>
+        function downloadPNG() {
+            const diagram = document.getElementById('diagram');
+            html2canvas(diagram, {
+                scale: 2,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'sj_inventory_3tier_architecture.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>

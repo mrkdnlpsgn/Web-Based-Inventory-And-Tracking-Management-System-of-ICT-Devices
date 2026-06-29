@@ -1,0 +1,111 @@
+import FieldHint from './FieldHint'
+
+function Table({ columns, data, onRowClick, emptyMessage, emptyAction, minRows, highlightId, mobileRender }) {
+  const empty = (
+    <div className="flex flex-col items-center gap-2 text-slate-300 dark:text-zinc-700 py-14">
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+      <p className="text-sm font-medium text-slate-400 dark:text-zinc-600">{emptyMessage || 'No records found'}</p>
+      {emptyAction && <p className="text-xs text-slate-300 dark:text-zinc-700">{emptyAction}</p>}
+    </div>
+  )
+
+  return (
+    <>
+      {/* Mobile card view */}
+      {mobileRender && (
+        <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+          {data.length === 0 ? empty : data.map((row, i) => (
+            <div
+              key={i}
+              onClick={() => onRowClick?.(row)}
+              className={`px-1 transition-colors duration-100 ${
+                row.id === highlightId ? 'bg-amber-400/10 ring-1 ring-inset ring-amber-400/40' : ''
+              } ${onRowClick ? 'cursor-pointer active:bg-slate-50 dark:active:bg-zinc-800/60' : ''}`}
+            >
+              {mobileRender(row)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Desktop table view */}
+    <div className={`overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800 ${mobileRender ? 'hidden md:block' : ''}`}>
+      <table className="min-w-full divide-y divide-slate-200 dark:divide-zinc-800 text-sm">
+        <thead>
+          <tr className="bg-slate-50 dark:bg-zinc-900">
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                className="px-4 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap"
+              >
+                {col.hint ? (
+                  <span className="inline-flex items-center">
+                    {col.label}
+                    <FieldHint text={col.hint} placement={col.hintPlacement} />
+                  </span>
+                ) : col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="bg-white dark:bg-zinc-950 divide-y divide-slate-100 dark:divide-zinc-800/60">
+          {data.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length} className="text-center py-14">
+                <div className="flex flex-col items-center gap-2 text-slate-300 dark:text-zinc-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <p className="text-sm font-medium text-slate-400 dark:text-zinc-600">
+                    {emptyMessage || 'No records found'}
+                  </p>
+                  {emptyAction ? (
+                    <p className="text-xs text-slate-300 dark:text-zinc-700">{emptyAction}</p>
+                  ) : (
+                    <p className="text-xs text-slate-300 dark:text-zinc-700">Records will appear here once added.</p>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ) : (
+            <>
+              {data.map((row, i) => (
+                <tr
+                  key={i}
+                  onClick={() => onRowClick?.(row)}
+                  className={`transition-colors ${
+                    row.id === highlightId
+                      ? 'duration-700 bg-amber-400/10 dark:bg-amber-400/10 ring-2 ring-inset ring-amber-400/50'
+                      : `duration-100 ${onRowClick
+                          ? 'hover:bg-slate-50 dark:hover:bg-zinc-900'
+                          : 'hover:bg-slate-50/60 dark:hover:bg-zinc-900/60'}`
+                  } ${onRowClick ? 'cursor-pointer group' : ''}`}
+                >
+                  {columns.map((col) => (
+                    <td key={col.key} className="px-4 py-3.5 text-slate-600 dark:text-zinc-300 whitespace-nowrap">
+                      {col.render ? col.render(row) : row[col.key]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {minRows && data.length < minRows &&
+                Array.from({ length: minRows - data.length }).map((_, i) => (
+                  <tr key={`filler-${i}`} aria-hidden="true">
+                    {columns.map((col) => (
+                      <td key={col.key} className="px-4 py-3.5">&nbsp;</td>
+                    ))}
+                  </tr>
+                ))
+              }
+            </>
+          )}
+        </tbody>
+      </table>
+    </div>
+    </>
+  )
+}
+
+export default Table
