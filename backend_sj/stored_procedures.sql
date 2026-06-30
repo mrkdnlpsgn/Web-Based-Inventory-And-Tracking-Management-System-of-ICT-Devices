@@ -257,18 +257,6 @@ BEGIN
     DELETE FROM users WHERE user_id = p_id;
 END $$
 
-DROP PROCEDURE IF EXISTS sp_users_reset_lockout $$
-CREATE PROCEDURE sp_users_reset_lockout(
-    IN p_id INT, IN p_password_hash VARCHAR(255),
-    IN p_full_name VARCHAR(100), IN p_role VARCHAR(20)
-)
-BEGIN
-    UPDATE users
-    SET password_hash = p_password_hash, full_name = p_full_name, `role` = p_role,
-        failed_login_attempts = 0, account_locked_until = NULL, is_active = TRUE
-    WHERE user_id = p_id;
-END $$
-
 -- =============================================================
 -- ASSETS
 -- =============================================================
@@ -842,26 +830,162 @@ END $$
 
 DELIMITER ;
 
--- Maintenance and Disposable Fix
+-- =============================================================
+-- EQUIPMENT RECORDS
+-- =============================================================
 DELIMITER $$
-DROP PROCEDURE IF EXISTS sp_maintenance_delete_by_asset $$
-CREATE PROCEDURE sp_maintenance_delete_by_asset(IN p_asset_id INT)
+
+DROP PROCEDURE IF EXISTS sp_equipment_get_all $$
+CREATE PROCEDURE sp_equipment_get_all()
 BEGIN
-    UPDATE maintenance_ledger
-    SET is_deleted = TRUE, deleted_at = NOW()
-    WHERE asset_id = p_asset_id AND is_deleted = FALSE;
+    SELECT equipment_id AS id, type, equipment_type AS equipmentType,
+           item_code AS itemCode, article, office, location, description,
+           accountable_person AS accountablePerson,
+           accountable_person_phone AS accountablePersonPhone,
+           accountable_person_email AS accountablePersonEmail,
+           device_count AS deviceCount,
+           created_at AS createdAt, updated_at AS updatedAt
+    FROM equipment_records
+    ORDER BY created_at DESC;
 END $$
 
-DROP PROCEDURE IF EXISTS sp_disposal_delete_by_asset $$
-CREATE PROCEDURE sp_disposal_delete_by_asset(IN p_asset_id INT)
+DROP PROCEDURE IF EXISTS sp_equipment_get_by_id $$
+CREATE PROCEDURE sp_equipment_get_by_id(IN p_id INT)
 BEGIN
-    UPDATE disposal_ledger
-    SET is_deleted = TRUE, deleted_at = NOW()
-    WHERE asset_id = p_asset_id AND is_deleted = FALSE;
+    SELECT equipment_id AS id, type, equipment_type AS equipmentType,
+           item_code AS itemCode, article, office, location, description,
+           accountable_person AS accountablePerson,
+           accountable_person_phone AS accountablePersonPhone,
+           accountable_person_email AS accountablePersonEmail,
+           device_count AS deviceCount,
+           created_at AS createdAt, updated_at AS updatedAt
+    FROM equipment_records
+    WHERE equipment_id = p_id;
 END $$
+
+DROP PROCEDURE IF EXISTS sp_equipment_create $$
+CREATE PROCEDURE sp_equipment_create(
+    IN  p_type                     VARCHAR(50),
+    IN  p_equipment_type           VARCHAR(100),
+    IN  p_item_code                VARCHAR(50),
+    IN  p_article                  VARCHAR(255),
+    IN  p_office                   VARCHAR(255),
+    IN  p_location                 VARCHAR(255),
+    IN  p_description              TEXT,
+    IN  p_accountable_person       VARCHAR(150),
+    IN  p_accountable_person_phone VARCHAR(50),
+    IN  p_accountable_person_email VARCHAR(150),
+    IN  p_device_count             INT,
+    OUT p_new_id                   BIGINT
+)
+BEGIN
+    INSERT INTO equipment_records (
+        type, equipment_type, item_code, article, office, location, description,
+        accountable_person, accountable_person_phone, accountable_person_email, device_count
+    ) VALUES (
+        p_type, p_equipment_type, p_item_code, p_article, p_office, p_location, p_description,
+        p_accountable_person, p_accountable_person_phone, p_accountable_person_email,
+        COALESCE(p_device_count, 0)
+    );
+    SET p_new_id = LAST_INSERT_ID();
+END $$
+
+DROP PROCEDURE IF EXISTS sp_equipment_update $$
+CREATE PROCEDURE sp_equipment_update(
+    IN p_id                        INT,
+    IN p_type                      VARCHAR(50),
+    IN p_equipment_type            VARCHAR(100),
+    IN p_item_code                 VARCHAR(50),
+    IN p_article                   VARCHAR(255),
+    IN p_office                    VARCHAR(255),
+    IN p_location                  VARCHAR(255),
+    IN p_description               TEXT,
+    IN p_accountable_person        VARCHAR(150),
+    IN p_accountable_person_phone  VARCHAR(50),
+    IN p_accountable_person_email  VARCHAR(150),
+    IN p_device_count              INT
+)
+BEGIN
+    UPDATE equipment_records
+    SET type                     = p_type,
+        equipment_type           = p_equipment_type,
+        item_code                = p_item_code,
+        article                  = p_article,
+        office                   = p_office,
+        location                 = p_location,
+        description              = p_description,
+        accountable_person       = p_accountable_person,
+        accountable_person_phone = p_accountable_person_phone,
+        accountable_person_email = p_accountable_person_email,
+        device_count             = COALESCE(p_device_count, 0)
+    WHERE equipment_id = p_id;
+END $$
+
+DROP PROCEDURE IF EXISTS sp_equipment_delete $$
+CREATE PROCEDURE sp_equipment_delete(IN p_id INT)
+BEGIN
+    DELETE FROM equipment_records WHERE equipment_id = p_id;
+END $$
+
+-- =============================================================
+-- DEVICE RECORDS
+-- =============================================================
+
+DROP PROCEDURE IF EXISTS sp_devices_get_by_equipment $$
+CREATE PROCEDURE sp_devices_get_by_equipment(IN p_equipment_id INT)
+BEGIN
+    SELECT device_id AS id, equipment_id AS equipmentId,
+           item_code AS itemCode, serial_number AS serialNumber,
+           model, amount_value AS amountValue, acquisition_date AS acquisitionDate,
+           created_at AS createdAt, updated_at AS updatedAt
+    FROM device_records
+    WHERE equipment_id = p_equipment_id
+    ORDER BY device_id ASC;
+END $$
+
+DROP PROCEDURE IF EXISTS sp_device_add $$
+CREATE PROCEDURE sp_device_add(
+    IN  p_equipment_id     INT,
+    IN  p_item_code        VARCHAR(50),
+    IN  p_serial_number    VARCHAR(100),
+    IN  p_model            VARCHAR(100),
+    IN  p_amount_value     DECIMAL(12,2),
+    IN  p_acquisition_date DATE,
+    OUT p_new_id           BIGINT
+)
+BEGIN
+    INSERT INTO device_records (equipment_id, item_code, serial_number, model, amount_value, acquisition_date)
+    VALUES (p_equipment_id, p_item_code, p_serial_number, p_model, p_amount_value, p_acquisition_date);
+    SET p_new_id = LAST_INSERT_ID();
+END $$
+
+DROP PROCEDURE IF EXISTS sp_device_update $$
+CREATE PROCEDURE sp_device_update(
+    IN p_device_id         INT,
+    IN p_item_code         VARCHAR(50),
+    IN p_serial_number     VARCHAR(100),
+    IN p_model             VARCHAR(100),
+    IN p_amount_value      DECIMAL(12,2),
+    IN p_acquisition_date  DATE
+)
+BEGIN
+    UPDATE device_records
+    SET item_code        = p_item_code,
+        serial_number    = p_serial_number,
+        model            = p_model,
+        amount_value     = p_amount_value,
+        acquisition_date = p_acquisition_date
+    WHERE device_id = p_device_id;
+END $$
+
+DROP PROCEDURE IF EXISTS sp_device_delete $$
+CREATE PROCEDURE sp_device_delete(IN p_device_id INT)
+BEGIN
+    DELETE FROM device_records WHERE device_id = p_device_id;
+END $$
+
 DELIMITER ;
 
 -- =============================================================
 -- END OF STORED PROCEDURES
--- Total: 54 stored procedures covering all CRUD + search + auth
 -- =============================================================

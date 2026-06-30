@@ -470,6 +470,50 @@ CREATE TABLE deleted_disposal (
 ) ENGINE=InnoDB COMMENT='Archive of soft-deleted disposal ledger records';
 
 -- =============================================================
+-- TABLE: equipment_records
+-- =============================================================
+CREATE TABLE equipment_records (
+    equipment_id              INT           NOT NULL AUTO_INCREMENT,
+    type                      VARCHAR(50)   NOT NULL COMMENT 'Hardware, Software, Peripherals, etc.',
+    equipment_type            VARCHAR(100)  NOT NULL COMMENT 'Desktop Computer, Laptop, Printer, etc.',
+    item_code                 VARCHAR(50)   NOT NULL COMMENT 'ICT-assigned item code',
+    article                   VARCHAR(255)  NOT NULL COMMENT 'Common name / article of the equipment',
+    office                    VARCHAR(255)  NOT NULL COMMENT 'Assigned office name',
+    location                  VARCHAR(255)  NOT NULL COMMENT 'Physical location',
+    description               TEXT          NULL,
+    accountable_person        VARCHAR(150)  NOT NULL,
+    accountable_person_phone  VARCHAR(50)   NULL,
+    accountable_person_email  VARCHAR(150)  NULL,
+    device_count              INT           NOT NULL DEFAULT 0,
+    created_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                                     ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT pk_equipment PRIMARY KEY (equipment_id)
+) ENGINE=InnoDB;
+
+-- =============================================================
+-- TABLE: device_records
+-- =============================================================
+CREATE TABLE device_records (
+    device_id         INT            NOT NULL AUTO_INCREMENT,
+    equipment_id      INT            NOT NULL,
+    item_code         VARCHAR(50)    NULL,
+    serial_number     VARCHAR(100)   NULL,
+    model             VARCHAR(100)   NULL,
+    amount_value      DECIMAL(12,2)  NULL COMMENT 'Acquisition unit value in PHP',
+    acquisition_date  DATE           NULL,
+    created_at        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                              ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT pk_devices           PRIMARY KEY (device_id),
+    CONSTRAINT fk_devices_equipment FOREIGN KEY (equipment_id)
+        REFERENCES equipment_records (equipment_id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- =============================================================
 -- INDEXES (for common query patterns)
 -- =============================================================
 
@@ -499,6 +543,15 @@ CREATE INDEX idx_dl_is_deleted         ON disposal_ledger (is_deleted);
 -- ai_recommendations: latest recommendation per asset
 CREATE INDEX idx_air_asset_id          ON ai_recommendations (asset_id);
 CREATE INDEX idx_air_generated_at      ON ai_recommendations (generated_at);
+
+-- equipment_records: common filters
+CREATE INDEX idx_eq_type               ON equipment_records (type);
+CREATE INDEX idx_eq_office             ON equipment_records (office);
+CREATE INDEX idx_eq_created_at         ON equipment_records (created_at);
+
+-- device_records: lookups by parent equipment
+CREATE INDEX idx_dr_equipment_id       ON device_records (equipment_id);
+CREATE INDEX idx_dr_serial_number      ON device_records (serial_number);
 
 -- audit_logs: filtering by user, module, date
 CREATE INDEX idx_al_user_id            ON audit_logs (user_id);

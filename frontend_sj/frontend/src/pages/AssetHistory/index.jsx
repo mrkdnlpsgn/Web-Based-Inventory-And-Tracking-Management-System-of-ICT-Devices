@@ -8,6 +8,7 @@ import { getAssets } from '../../services/assetService'
 import { getUsers } from '../../services/userService'
 import { getOffices } from '../../services/officeService'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useAuth } from '../../hooks/useAuth'
 
 const EVENT_TYPES = ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'MAINTENANCE', 'DISPOSAL', 'ARCHIVED']
 
@@ -28,13 +29,25 @@ function formatDate(dt) {
 const INPUT_CLASS = 'w-full rounded-md border border-slate-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150'
 
 function LogEventModal({ onClose, onSave, assets, users, offices }) {
-  const [form, setForm]     = useState({ assetId: '', eventType: 'ASSIGNED', fromOfficeId: '', toOfficeId: '', performedById: '', notes: '' })
+  const { user } = useAuth()
+  const [form, setForm]     = useState({ assetId: '', eventType: 'ASSIGNED', fromOfficeId: '', toOfficeId: '', performedById: user?.id ? String(user.id) : '', notes: '' })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   const set = (key) => (e) => {
     setForm((p) => ({ ...p, [key]: e.target.value }))
     setErrors((p) => { const n = { ...p }; delete n[key]; return n })
+  }
+
+  const handleAssetChange = (e) => {
+    const selectedId = e.target.value
+    const selected = assets.find((a) => String(a.id) === selectedId)
+    setForm((p) => ({
+      ...p,
+      assetId: selectedId,
+      fromOfficeId: selected?.office?.id ? String(selected.office.id) : '',
+    }))
+    setErrors((p) => { const n = { ...p }; delete n.assetId; return n })
   }
 
   const handleSubmit = async (e) => {
@@ -72,7 +85,7 @@ function LogEventModal({ onClose, onSave, assets, users, offices }) {
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Asset<span className="text-red-400 ml-0.5">*</span></label>
           <div className="relative">
-            <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.assetId} onChange={set('assetId')}>
+            <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.assetId} onChange={handleAssetChange}>
               <option value="">— Select asset —</option>
               {assets.map((a) => (
                 <option key={a.id} value={String(a.id)}>{a.propertyNumber} — {a.description}</option>
@@ -100,14 +113,8 @@ function LogEventModal({ onClose, onSave, assets, users, offices }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">From Office</label>
-            <div className="relative">
-              <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.fromOfficeId} onChange={set('fromOfficeId')}>
-                <option value="">— None —</option>
-                {offices.map((o) => <option key={o.id} value={String(o.id)}>{o.officeName}</option>)}
-              </select>
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-              </div>
+            <div className={INPUT_CLASS + ' bg-slate-50 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-400 cursor-not-allowed select-none'}>
+              {offices.find((o) => String(o.id) === form.fromOfficeId)?.officeName || '— Auto-filled from asset —'}
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -126,14 +133,8 @@ function LogEventModal({ onClose, onSave, assets, users, offices }) {
 
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Performed By</label>
-          <div className="relative">
-            <select className={INPUT_CLASS + ' appearance-none pr-9'} value={form.performedById} onChange={set('performedById')}>
-              <option value="">— None —</option>
-              {users.map((u) => <option key={u.id} value={String(u.id)}>{u.fullName || u.username}</option>)}
-            </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-            </div>
+          <div className={INPUT_CLASS + ' bg-slate-50 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-400 cursor-not-allowed select-none'}>
+            {user?.fullName || user?.username || '—'}
           </div>
         </div>
 

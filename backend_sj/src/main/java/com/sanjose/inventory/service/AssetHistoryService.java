@@ -106,6 +106,13 @@ public class AssetHistoryService {
             HISTORY_MAPPER, newId);
 
         AssetHistory saved = list.isEmpty() ? new AssetHistory() : list.get(0);
+
+        if ("TRANSFERRED".equals(req.getEventType()) && req.getToOfficeId() != null) {
+            jdbcTemplate.update(
+                "UPDATE assets SET office_id = ?, updated_at = NOW() WHERE asset_id = ? AND is_deleted = 0",
+                req.getToOfficeId(), req.getAssetId());
+        }
+
         auditLogService.log("HISTORY_CREATED", "AssetHistory", newId, "asset_history",
             "Event: " + req.getEventType());
         return saved;
