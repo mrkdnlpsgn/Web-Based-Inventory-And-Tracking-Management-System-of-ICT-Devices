@@ -63,11 +63,9 @@ public class MaintenanceLedgerService {
         return m;
     };
 
-    public List<MaintenanceLedger> findAll(String search) {
-        if (search != null && !search.isBlank()) {
-            return jdbcTemplate.query("CALL sp_maintenance_search(?)", MAINT_MAPPER, search.trim());
-        }
-        return jdbcTemplate.query("CALL sp_maintenance_get_all()", MAINT_MAPPER);
+    public List<MaintenanceLedger> findAll(String search, int page, int size) {
+        return jdbcTemplate.query("CALL sp_maintenance_list(?, ?, ?)", MAINT_MAPPER,
+            search, size, page * size);
     }
 
     public List<MaintenanceLedger> findByAsset(Long assetId) {

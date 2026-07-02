@@ -62,11 +62,9 @@ public class DisposalLedgerService {
         return d;
     };
 
-    public List<DisposalLedger> findAll(String search) {
-        if (search != null && !search.isBlank()) {
-            return jdbcTemplate.query("CALL sp_disposal_search(?)", DISPOSAL_MAPPER, search.trim());
-        }
-        return jdbcTemplate.query("CALL sp_disposal_get_all()", DISPOSAL_MAPPER);
+    public List<DisposalLedger> findAll(String search, int page, int size) {
+        return jdbcTemplate.query("CALL sp_disposal_list(?, ?, ?)", DISPOSAL_MAPPER,
+            search, size, page * size);
     }
 
     public List<DisposalLedger> findByAsset(Long assetId) {

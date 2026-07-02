@@ -262,25 +262,9 @@ END $$
 -- =============================================================
 
 DROP PROCEDURE IF EXISTS sp_assets_get_all $$
-CREATE PROCEDURE sp_assets_get_all()
-BEGIN
-    SELECT a.asset_id AS id, a.property_number AS propertyNumber, a.`description`,
-           a.quantity, a.acquisition_date AS acquisitionDate, a.unit_value AS unitValue,
-           a.location, a.`condition`, a.lifecycle_status AS lifecycleStatus,
-           a.accountable_person AS accountablePerson, a.physical_count AS physicalCount,
-           a.qr_code_path AS qrCodePath, a.sha256_hash AS sha256Hash,
-           a.remarks, a.created_at AS createdAt, a.updated_at AS updatedAt,
-           c.category_id, c.category_name AS categoryName,
-           o.office_id, o.office_name AS officeName
-    FROM assets a
-    LEFT JOIN categories c ON a.category_id = c.category_id
-    LEFT JOIN offices o ON a.office_id = o.office_id
-    WHERE a.is_deleted = FALSE
-    ORDER BY a.created_at DESC;
-END $$
-
 DROP PROCEDURE IF EXISTS sp_assets_search $$
-CREATE PROCEDURE sp_assets_search(IN p_search VARCHAR(255))
+DROP PROCEDURE IF EXISTS sp_assets_list $$
+CREATE PROCEDURE sp_assets_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
 BEGIN
     SET p_search = TRIM(p_search);
     SELECT a.asset_id AS id, a.property_number AS propertyNumber, a.`description`,
@@ -296,6 +280,7 @@ BEGIN
     LEFT JOIN offices o ON a.office_id = o.office_id
     WHERE a.is_deleted = FALSE
       AND (
+        p_search IS NULL OR p_search = '' OR
         a.property_number    LIKE CONCAT('%', p_search, '%')
         OR a.`description`   LIKE CONCAT('%', p_search, '%')
         OR a.accountable_person LIKE CONCAT('%', p_search, '%')
@@ -305,7 +290,8 @@ BEGIN
         OR c.category_name   LIKE CONCAT('%', p_search, '%')
         OR o.office_name     LIKE CONCAT('%', p_search, '%')
       )
-    ORDER BY a.created_at DESC;
+    ORDER BY a.created_at DESC
+    LIMIT p_limit OFFSET p_offset;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_assets_get_by_id $$
@@ -487,23 +473,9 @@ END $$
 -- =============================================================
 
 DROP PROCEDURE IF EXISTS sp_maintenance_get_all $$
-CREATE PROCEDURE sp_maintenance_get_all()
-BEGIN
-    SELECT m.maintenance_id AS id, m.maintenance_type AS maintenanceType,
-           m.findings, m.actions_taken AS actionsTaken,
-           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt,
-           a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
-           r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
-           m.assigned_to AS assignedTo
-    FROM maintenance_ledger m
-    LEFT JOIN assets a ON m.asset_id = a.asset_id
-    LEFT JOIN users r ON m.recorded_by = r.user_id
-    WHERE m.is_deleted = FALSE
-    ORDER BY m.maintenance_date DESC;
-END $$
-
 DROP PROCEDURE IF EXISTS sp_maintenance_search $$
-CREATE PROCEDURE sp_maintenance_search(IN p_search VARCHAR(255))
+DROP PROCEDURE IF EXISTS sp_maintenance_list $$
+CREATE PROCEDURE sp_maintenance_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
 BEGIN
     SET p_search = TRIM(p_search);
     SELECT m.maintenance_id AS id, m.maintenance_type AS maintenanceType,
@@ -517,6 +489,7 @@ BEGIN
     LEFT JOIN users r ON m.recorded_by = r.user_id
     WHERE m.is_deleted = FALSE
       AND (
+        p_search IS NULL OR p_search = '' OR
         m.maintenance_type LIKE CONCAT('%', p_search, '%')
         OR m.findings LIKE CONCAT('%', p_search, '%')
         OR m.`status` LIKE CONCAT('%', p_search, '%')
@@ -524,7 +497,8 @@ BEGIN
         OR a.`description` LIKE CONCAT('%', p_search, '%')
         OR r.full_name LIKE CONCAT('%', p_search, '%')
       )
-    ORDER BY m.maintenance_date DESC;
+    ORDER BY m.maintenance_date DESC
+    LIMIT p_limit OFFSET p_offset;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_maintenance_get_by_id $$
@@ -636,23 +610,9 @@ END $$
 -- =============================================================
 
 DROP PROCEDURE IF EXISTS sp_disposal_get_all $$
-CREATE PROCEDURE sp_disposal_get_all()
-BEGIN
-    SELECT d.disposal_id AS id, d.reason, d.inspection_findings AS inspectionFindings,
-           d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
-           d.inspection_date AS inspectionDate, d.created_at AS createdAt,
-           a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
-           r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
-           d.approved_by AS approvedBy
-    FROM disposal_ledger d
-    LEFT JOIN assets a ON d.asset_id = a.asset_id
-    LEFT JOIN users r ON d.recorded_by = r.user_id
-    WHERE d.is_deleted = FALSE
-    ORDER BY d.inspection_date DESC;
-END $$
-
 DROP PROCEDURE IF EXISTS sp_disposal_search $$
-CREATE PROCEDURE sp_disposal_search(IN p_search VARCHAR(255))
+DROP PROCEDURE IF EXISTS sp_disposal_list $$
+CREATE PROCEDURE sp_disposal_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
 BEGIN
     SET p_search = TRIM(p_search);
     SELECT d.disposal_id AS id, d.reason, d.inspection_findings AS inspectionFindings,
@@ -666,6 +626,7 @@ BEGIN
     LEFT JOIN users r ON d.recorded_by = r.user_id
     WHERE d.is_deleted = FALSE
       AND (
+        p_search IS NULL OR p_search = '' OR
         d.recommended_method LIKE CONCAT('%', p_search, '%')
         OR d.disposal_status LIKE CONCAT('%', p_search, '%')
         OR d.reason LIKE CONCAT('%', p_search, '%')
@@ -673,7 +634,8 @@ BEGIN
         OR a.`description` LIKE CONCAT('%', p_search, '%')
         OR r.full_name LIKE CONCAT('%', p_search, '%')
       )
-    ORDER BY d.inspection_date DESC;
+    ORDER BY d.inspection_date DESC
+    LIMIT p_limit OFFSET p_offset;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_disposal_get_by_id $$
@@ -836,8 +798,10 @@ DELIMITER ;
 DELIMITER $$
 
 DROP PROCEDURE IF EXISTS sp_equipment_get_all $$
-CREATE PROCEDURE sp_equipment_get_all()
+DROP PROCEDURE IF EXISTS sp_equipment_list $$
+CREATE PROCEDURE sp_equipment_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
 BEGIN
+    SET p_search = TRIM(p_search);
     SELECT equipment_id AS id, type, equipment_type AS equipmentType,
            item_code AS itemCode, article, office, location, description,
            accountable_person AS accountablePerson,
@@ -846,7 +810,18 @@ BEGIN
            device_count AS deviceCount,
            created_at AS createdAt, updated_at AS updatedAt
     FROM equipment_records
-    ORDER BY created_at DESC;
+    WHERE (
+        p_search IS NULL OR p_search = '' OR
+        item_code LIKE CONCAT('%', p_search, '%')
+        OR article LIKE CONCAT('%', p_search, '%')
+        OR equipment_type LIKE CONCAT('%', p_search, '%')
+        OR office LIKE CONCAT('%', p_search, '%')
+        OR location LIKE CONCAT('%', p_search, '%')
+        OR description LIKE CONCAT('%', p_search, '%')
+        OR accountable_person LIKE CONCAT('%', p_search, '%')
+      )
+    ORDER BY created_at DESC
+    LIMIT p_limit OFFSET p_offset;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_equipment_get_by_id $$

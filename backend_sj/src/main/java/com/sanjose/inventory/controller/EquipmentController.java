@@ -19,8 +19,10 @@ public class EquipmentController {
     private final EquipmentService equipmentService;
 
     @GetMapping
-    public List<EquipmentRecord> getAll() {
-        return equipmentService.findAll();
+    public List<EquipmentRecord> getAll(@RequestParam(required = false) String search,
+                                         @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(defaultValue = "20") int size) {
+        return equipmentService.findAll(search, page, size);
     }
 
     @GetMapping("/{id}")

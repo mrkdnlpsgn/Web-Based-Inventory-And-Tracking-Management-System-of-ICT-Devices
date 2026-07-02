@@ -28,7 +28,7 @@ export default {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }],
       },
       animation: {
-        'fade-slide':     'fadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'fade-slide':     'fadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
         'fade-in':        'fadeIn 0.2s cubic-bezier(0.25, 1, 0.5, 1) both',
         'slide-in-right': 'slideInRight 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
         'toast-out':      'toastOut 0.2s cubic-bezier(0.25, 1, 0.5, 1) forwards',

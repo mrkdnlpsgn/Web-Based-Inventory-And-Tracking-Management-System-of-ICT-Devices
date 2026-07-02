@@ -69,11 +69,9 @@ public class AssetService {
         return a;
     };
 
-    public List<Asset> findAll(String search) {
-        if (search != null && !search.isBlank()) {
-            return jdbcTemplate.query("CALL sp_assets_search(?)", ASSET_MAPPER, search.trim());
-        }
-        return jdbcTemplate.query("CALL sp_assets_get_all()", ASSET_MAPPER);
+    public List<Asset> findAll(String search, int page, int size) {
+        return jdbcTemplate.query("CALL sp_assets_list(?, ?, ?)", ASSET_MAPPER,
+            search, size, page * size);
     }
 
     public Asset findById(Long id) {

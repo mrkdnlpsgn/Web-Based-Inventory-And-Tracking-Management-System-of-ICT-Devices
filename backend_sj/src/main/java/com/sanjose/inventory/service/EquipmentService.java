@@ -63,8 +63,9 @@ public class EquipmentService {
         return d;
     };
 
-    public List<EquipmentRecord> findAll() {
-        List<EquipmentRecord> list = jdbcTemplate.query("CALL sp_equipment_get_all()", EQUIPMENT_MAPPER);
+    public List<EquipmentRecord> findAll(String search, int page, int size) {
+        List<EquipmentRecord> list = jdbcTemplate.query("CALL sp_equipment_list(?, ?, ?)", EQUIPMENT_MAPPER,
+            search, size, page * size);
         list.forEach(e -> e.setDevices(fetchDevices(e.getId())));
         return list;
     }

@@ -18,7 +18,11 @@ public class DisposalLedgerController {
     private final DisposalLedgerService disposalLedgerService;
 
     @GetMapping
-    public List<DisposalLedger> getAll(@RequestParam(required = false) String search) { return disposalLedgerService.findAll(search); }
+    public List<DisposalLedger> getAll(@RequestParam(required = false) String search,
+                                        @RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(defaultValue = "20") int size) {
+        return disposalLedgerService.findAll(search, page, size);
+    }
 
     @GetMapping("/{id}")
     public DisposalLedger getById(@PathVariable Long id) {
