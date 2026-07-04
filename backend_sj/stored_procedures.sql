@@ -619,6 +619,8 @@ BEGIN
            d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
            d.inspection_date AS inspectionDate, d.created_at AS createdAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
+           a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
+           a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
            d.approved_by AS approvedBy
     FROM disposal_ledger d
@@ -645,6 +647,8 @@ BEGIN
            d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
            d.inspection_date AS inspectionDate, d.created_at AS createdAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
+           a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
+           a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
            d.approved_by AS approvedBy
     FROM disposal_ledger d
@@ -660,6 +664,8 @@ BEGIN
            d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
            d.inspection_date AS inspectionDate, d.created_at AS createdAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
+           a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
+           a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
            d.approved_by AS approvedBy
     FROM disposal_ledger d

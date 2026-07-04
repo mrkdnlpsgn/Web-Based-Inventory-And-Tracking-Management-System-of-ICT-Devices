@@ -59,22 +59,30 @@ class AssetModel {
     required this.updatedAt,
   });
 
+  // Nested inside Disposal/Maintenance/AssetHistory responses, the backend serializes a
+  // partial asset (only id/propertyNumber/description populated — category, office, and
+  // most other fields are absent or null). Fall back to placeholders for those so parsing
+  // doesn't crash; callers in that context never read the placeholder fields.
   factory AssetModel.fromJson(Map<String, dynamic> json) => AssetModel(
         id: json['id'] as int,
         propertyNumber: json['propertyNumber'] as String,
         description: json['description'] as String,
-        category: CategoryModel.fromJson(json['category'] as Map<String, dynamic>),
-        quantity: json['quantity'] as int,
-        acquisitionDate: json['acquisitionDate'] as String,
-        unitValue: (json['unitValue'] as num).toDouble(),
-        office: OfficeModel.fromJson(json['office'] as Map<String, dynamic>),
+        category: json['category'] != null
+            ? CategoryModel.fromJson(json['category'] as Map<String, dynamic>)
+            : const CategoryModel(id: 0, categoryName: '—'),
+        quantity: json['quantity'] as int? ?? 1,
+        acquisitionDate: json['acquisitionDate'] as String? ?? '',
+        unitValue: json['unitValue'] != null ? (json['unitValue'] as num).toDouble() : 0,
+        office: json['office'] != null
+            ? OfficeModel.fromJson(json['office'] as Map<String, dynamic>)
+            : const OfficeModel(id: 0, officeName: '—'),
         accountablePerson: json['accountablePerson'] as String?,
         physicalCount: json['physicalCount'] as int?,
-        location: json['location'] as String,
-        condition: json['condition'] as String,
-        lifecycleStatus: json['lifecycleStatus'] as String,
+        location: json['location'] as String? ?? '',
+        condition: json['condition'] as String? ?? '',
+        lifecycleStatus: json['lifecycleStatus'] as String? ?? '',
         remarks: json['remarks'] as String?,
-        createdAt: json['createdAt'] as String,
-        updatedAt: json['updatedAt'] as String,
+        createdAt: json['createdAt'] as String? ?? '',
+        updatedAt: json['updatedAt'] as String? ?? '',
       );
 }

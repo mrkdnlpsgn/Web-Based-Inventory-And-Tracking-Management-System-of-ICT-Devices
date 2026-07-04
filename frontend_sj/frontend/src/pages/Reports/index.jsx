@@ -3,10 +3,15 @@ import * as XLSX from 'xlsx'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import { useToast } from '../../context/ToastContext'
-import { getAssets } from '../../services/assetService'
+import api from '../../services/api'
 import { getAssetHistory } from '../../services/assetHistoryService'
-import { getMaintenance } from '../../services/maintenanceService'
-import { getDisposal } from '../../services/disposalService'
+
+// Reports need the full dataset, not a paginated page. getAssets()/getDisposal()/getMaintenance()
+// default to the backend's page size of 20 — fine for list pages, wrong here, so fetch directly
+// with a size large enough to always cover a single municipal office's inventory in one page.
+const getAllAssets     = () => api.get('/assets', { params: { size: 100000 } })
+const getAllDisposal   = () => api.get('/disposal', { params: { size: 100000 } })
+const getAllMaintenance = () => api.get('/maintenance', { params: { size: 100000 } })
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 const fmtDate = (d) =>
@@ -16,6 +21,23 @@ const fmtMoney = (v) =>
 const fmtDateTime = (dt) =>
   dt ? new Date(dt).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// RPCPPE physical-count variance: quantity per records vs. quantity per physical count.
+// physicalCount is null until someone has actually counted the asset — don't assume a shortage.
+const assetVariance = (r) => {
+  if (r.physicalCount == null) return null
+  return Number(r.physicalCount) - Number(r.quantity ?? 1)
+}
+const fmtVariance = (r) => {
+  const v = assetVariance(r)
+  if (v === null) return 'Not yet counted'
+  if (v === 0) return 'None'
+  return v > 0 ? `+${v} (Overage)` : `${v} (Shortage)`
+}
+const varianceValue = (r) => {
+  const v = assetVariance(r)
+  return v === null ? 0 : v * (Number(r.unitValue) || 0)
+}
 
 // ── Report definitions ────────────────────────────────────────────────────────
 const REPORTS = [
@@ -30,7 +52,7 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      return (await getAssets()).data
+      return (await getAllAssets()).data
     },
     headers: [
       { label: 'Property No.',    display: (r) => <span className="font-mono text-xs">{r.propertyNumber || '—'}</span>,                                   raw: (r) => r.propertyNumber || '' },
@@ -56,7 +78,7 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      const assets = (await getAssets()).data
+      const assets = (await getAllAssets()).data
       const map = {}
       assets.forEach((a) => {
         const key = a.condition || 'UNKNOWN'
@@ -109,10 +131,22 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      const assets = (await getAssets()).data
+      const assets = (await getAllAssets()).data
       return assets
         .filter((a) => a.unitValue != null && a.unitValue !== '')
         .sort((a, b) => Number(b.unitValue) - Number(a.unitValue))
+    },
+    extraRows: (rows) => {
+      const total = rows.reduce((s, r) => s + (Number(r.unitValue) || 0) * (Number(r.quantity) || 1), 0)
+      return [
+        ...rows,
+        {
+          propertyNumber: 'TOTAL ACQUISITION VALUE',
+          description: '', category: null, condition: '', lifecycleStatus: '',
+          unitValue: total, quantity: 1, acquisitionDate: '', office: null,
+          location: '', accountablePerson: null, remarks: '',
+        },
+      ]
     },
     headers: [
       { label: 'Property No.',    display: (r) => <span className="font-mono text-xs">{r.propertyNumber || '—'}</span>,                                   raw: (r) => r.propertyNumber || '' },
@@ -136,7 +170,7 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      return (await getMaintenance()).data
+      return (await getAllMaintenance()).data
     },
     headers: [
       { label: 'Asset',           display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>,       raw: (r) => r.asset?.description || '' },
@@ -159,7 +193,7 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      return (await getDisposal()).data
+      return (await getAllDisposal()).data
     },
     headers: [
       { label: 'Asset',           display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>,       raw: (r) => r.asset?.description || '' },
@@ -169,6 +203,71 @@ const REPORTS = [
       { label: 'Inspection Date', display: (r) => fmtDate(r.inspectionDate),                                                                             raw: (r) => r.inspectionDate || '' },
       { label: 'Approved By',     display: (r) => r.approvedBy?.fullName || r.approvedBy?.username || '—',                                               raw: (r) => r.approvedBy?.fullName || r.approvedBy?.username || '' },
       { label: 'Recorded By',     display: (r) => r.recordedBy?.fullName || r.recordedBy?.username || '—',                                               raw: (r) => r.recordedBy?.fullName || r.recordedBy?.username || '' },
+    ],
+  },
+  {
+    id: 'rpcppe',
+    title: 'RPCPPE (Physical Count)',
+    description: 'COA-format Report on the Physical Count of Property, Plant and Equipment — records vs. physical count variance.',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.914a2 2 0 00-.586-1.414l-3.914-3.914A2 2 0 0010.086 2H6zm.5 8a.5.5 0 000 1h7a.5.5 0 000-1h-7zm0 3a.5.5 0 000 1h4a.5.5 0 000-1h-4z" clipRule="evenodd" />
+      </svg>
+    ),
+    async load() {
+      return (await getAllAssets()).data
+    },
+    headers: [
+      { label: 'Article',             display: (r) => r.category?.categoryName || '—',                                                                    raw: (r) => r.category?.categoryName || '' },
+      { label: 'Description',         display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.description || '—'}</span>,          raw: (r) => r.description || '' },
+      { label: 'Property No.',        display: (r) => <span className="font-mono text-xs">{r.propertyNumber || '—'}</span>,                                raw: (r) => r.propertyNumber || '' },
+      { label: 'Unit Value',          display: (r) => fmtMoney(r.unitValue),                                                                              raw: (r) => r.unitValue != null ? Number(r.unitValue).toFixed(2) : '' },
+      { label: 'Qty per Records',     display: (r) => r.quantity ?? 1,                                                                                    raw: (r) => r.quantity ?? 1 },
+      { label: 'Qty per Phys. Count', display: (r) => r.physicalCount ?? '—',                                                                             raw: (r) => r.physicalCount ?? '' },
+      { label: 'Shortage/Overage',    display: (r) => fmtVariance(r),                                                                                      raw: (r) => fmtVariance(r) },
+      { label: 'Value of Variance',   display: (r) => varianceValue(r) !== 0 ? fmtMoney(varianceValue(r)) : '—',                                           raw: (r) => varianceValue(r).toFixed(2) },
+      { label: 'Location',            display: (r) => r.location || '—',                                                                                  raw: (r) => r.location || '' },
+      { label: 'Condition',           display: (r) => r.condition || '—',                                                                                 raw: (r) => r.condition || '' },
+      { label: 'Remarks',             display: (r) => r.remarks || '—',                                                                                   raw: (r) => r.remarks || '' },
+    ],
+    certification: [
+      'Prepared by: Property Custodian / GSO Staff',
+      'Certified Correct by: Inventory Committee Chairman',
+      'Member, Inventory Committee',
+      'Member, Inventory Committee',
+      'Verified by: COA Representative',
+    ],
+  },
+  {
+    id: 'iirup',
+    title: 'IIRUP (Unserviceable Property)',
+    description: 'COA-format Inventory and Inspection Report of Unserviceable Property, for items pending disposal.',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+      </svg>
+    ),
+    async load() {
+      return (await getAllDisposal()).data
+    },
+    headers: [
+      { label: 'Property No.',        display: (r) => <span className="font-mono text-xs">{r.asset?.propertyNumber || '—'}</span>,                        raw: (r) => r.asset?.propertyNumber || '' },
+      { label: 'Article/Description', display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>,   raw: (r) => r.asset?.description || '' },
+      { label: 'Date Acquired',       display: (r) => fmtDate(r.asset?.acquisitionDate),                                                                  raw: (r) => r.asset?.acquisitionDate || '' },
+      { label: 'Qty',                 display: (r) => r.asset?.quantity ?? 1,                                                                             raw: (r) => r.asset?.quantity ?? 1 },
+      { label: 'Unit Cost',           display: (r) => fmtMoney(r.asset?.unitValue),                                                                       raw: (r) => r.asset?.unitValue != null ? Number(r.asset.unitValue).toFixed(2) : '' },
+      { label: 'Total Cost',          display: (r) => fmtMoney((Number(r.asset?.unitValue) || 0) * (Number(r.asset?.quantity) || 1)),                     raw: (r) => ((Number(r.asset?.unitValue) || 0) * (Number(r.asset?.quantity) || 1)).toFixed(2) },
+      { label: 'Condition',           display: (r) => r.asset?.condition || '—',                                                                          raw: (r) => r.asset?.condition || '' },
+      { label: 'Inspection Findings', display: (r) => r.inspectionFindings ? <span className="max-w-[180px] truncate block" title={r.inspectionFindings}>{r.inspectionFindings}</span> : '—', raw: (r) => r.inspectionFindings || '' },
+      { label: 'Recommended Action',  display: (r) => r.recommendedMethod || '—',                                                                         raw: (r) => r.recommendedMethod || '' },
+      { label: 'Inspection Date',     display: (r) => fmtDate(r.inspectionDate),                                                                          raw: (r) => r.inspectionDate || '' },
+      { label: 'Status',              display: (r) => r.disposalStatus || '—',                                                                            raw: (r) => r.disposalStatus || '' },
+    ],
+    certification: [
+      'Inspected by: GSO Inspector',
+      'Certified Correct by: Inventory Committee Chairman',
+      'Recommending Approval: Head of Office',
+      'Approved by: Local Chief Executive (Municipal Mayor)',
     ],
   },
 ]
@@ -190,11 +289,20 @@ function exportExcel(rows, headers, title) {
   XLSX.writeFile(wb, `${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
-function exportPDF(rows, headers, title) {
+function exportPDF(rows, headers, title, certification) {
   const headerCells = headers.map((h) => `<th>${esc(h.label)}</th>`).join('')
   const bodyRows = rows.map((row) =>
     `<tr>${headers.map(({ raw }) => `<td>${esc(raw(row)) || '—'}</td>`).join('')}</tr>`
   ).join('')
+
+  const certifyBlock = certification?.length ? `
+  <div class="certify">
+    ${certification.map((role) => `
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <p class="sig-role">${esc(role)}</p>
+    </div>`).join('')}
+  </div>` : ''
 
   const html = `<!DOCTYPE html>
 <html>
@@ -211,6 +319,10 @@ function exportPDF(rows, headers, title) {
     td     { padding: 5px 8px; border: 1px solid #e5e7eb; vertical-align: top; color: #374151; }
     tr:nth-child(even) td { background: #f9fafb; }
     .footer { margin-top: 16px; font-size: 9px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 8px; }
+    .certify { display: flex; flex-wrap: wrap; gap: 32px; margin-top: 48px; page-break-inside: avoid; }
+    .sig-block { width: 200px; }
+    .sig-line { border-bottom: 1px solid #111827; height: 36px; }
+    .sig-role { font-size: 9px; text-align: center; margin-top: 4px; color: #374151; }
     @media print { body { padding: 0; } }
   </style>
 </head>
@@ -223,6 +335,7 @@ function exportPDF(rows, headers, title) {
     <thead><tr>${headerCells}</tr></thead>
     <tbody>${bodyRows}</tbody>
   </table>
+  ${certifyBlock}
   <p class="footer">This is a system-generated report. &copy; ${new Date().getFullYear()} San Jose Municipal Hall.</p>
   <script>window.onload = () => { window.print(); window.onafterprint = () => window.close() }<\/script>
 </body>
@@ -278,17 +391,7 @@ function Reports() {
   }
 
   const getExportRows = () => {
-    if (activeId !== 'valuation') return reportData
-    const total = reportData.reduce((s, r) => s + (Number(r.unitValue) || 0) * (Number(r.quantity) || 1), 0)
-    return [
-      ...reportData,
-      {
-        propertyNumber: 'TOTAL ACQUISITION VALUE',
-        description: '', category: null, condition: '', lifecycleStatus: '',
-        unitValue: total, quantity: 1, acquisitionDate: '', office: null,
-        location: '', accountablePerson: null, remarks: '',
-      },
-    ]
+    return activeReport?.extraRows ? activeReport.extraRows(reportData) : reportData
   }
 
   return (
@@ -348,7 +451,7 @@ function Reports() {
                   </svg>
                   <span className="hidden sm:inline">Export Excel</span>
                 </Button>
-                <Button variant="secondary" size="md" onClick={() => exportPDF(getExportRows(), activeReport.headers, activeReport.title)}>
+                <Button variant="secondary" size="md" onClick={() => exportPDF(getExportRows(), activeReport.headers, activeReport.title, activeReport.certification)}>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:mr-1.5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clipRule="evenodd" />
                   </svg>

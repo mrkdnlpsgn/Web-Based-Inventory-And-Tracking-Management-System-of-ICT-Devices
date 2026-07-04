@@ -5,6 +5,7 @@ import '../model/asset_model.dart';
 import '../provider/asset_provider.dart';
 import '../screens/asset_form_screen.dart';
 import '../data/asset_service.dart';
+import '../provider/ai_recommendation_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/delete_dialog.dart';
@@ -140,10 +141,11 @@ class _DetailsTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        _AiRecommendationCard(assetId: asset.id),
+        const SizedBox(height: 12),
         _card('Asset Details', [
           _row('Category', asset.category.categoryName),
-          _row('Office', asset.office.officeName),
-          _row('Location', asset.location),
+          _row('Location', asset.office.officeName),
           if (asset.accountablePerson != null) _row('Accountable Person', asset.accountablePerson!),
           _row('Quantity', asset.quantity.toString()),
           if (asset.physicalCount != null) _row('Physical Count', asset.physicalCount.toString()),
@@ -340,5 +342,140 @@ class _HistoryTile extends StatelessWidget {
     } catch (_) {
       return raw;
     }
+  }
+}
+
+class _AiRecommendationCard extends ConsumerStatefulWidget {
+  final int assetId;
+  const _AiRecommendationCard({required this.assetId});
+
+  @override
+  ConsumerState<_AiRecommendationCard> createState() => _AiRecommendationCardState();
+}
+
+class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
+  bool _generating = false;
+
+  Future<void> _generate() async {
+    setState(() => _generating = true);
+    try {
+      await ref.read(aiRecommendationServiceProvider).generate(widget.assetId);
+      ref.invalidate(aiRecommendationProvider(widget.assetId));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Colors.red.shade800,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  Color _color(String rec) => switch (rec) {
+        'MAINTAIN' => AppTheme.brand,
+        'REPAIR' => AppTheme.statusMaintenance,
+        'MONITOR' => AppTheme.statusAssigned,
+        'REVIEW_FOR_DISPOSAL' => AppTheme.statusDisposed,
+        'BUDGET_PRIORITY' => Colors.deepOrange,
+        _ => Colors.grey,
+      };
+
+  String _label(String rec) => switch (rec) {
+        'MAINTAIN' => 'Maintain',
+        'REPAIR' => 'Repair',
+        'MONITOR' => 'Monitor',
+        'REVIEW_FOR_DISPOSAL' => 'Review for Disposal',
+        'BUDGET_PRIORITY' => 'Budget Priority',
+        _ => rec,
+      };
+
+  String _fmtDate(String raw) {
+    try {
+      final dt = DateTime.parse(raw);
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = ref.watch(authProvider).value?.isAdmin ?? false;
+    final recAsync = ref.watch(aiRecommendationProvider(widget.assetId));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, size: 16, color: AppTheme.brand),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('AI LIFECYCLE RECOMMENDATION',
+                      style: TextStyle(color: Colors.white54, fontSize: 12,
+                          fontWeight: FontWeight.w600, letterSpacing: 0.8)),
+                ),
+                if (isAdmin)
+                  _generating
+                      ? const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brand))
+                      : IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white54),
+                          tooltip: 'Generate recommendation',
+                          onPressed: _generate,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            recAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
+              ),
+              error: (e, _) => Text(e.toString(), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              data: (rec) {
+                if (rec == null) {
+                  return Text(
+                    isAdmin
+                        ? 'No recommendation yet. Tap refresh to generate one.'
+                        : 'No recommendation generated yet.',
+                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                  );
+                }
+                final color = _color(rec.recommendation);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: color.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(_label(rec.recommendation),
+                          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(rec.rationale, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+                    const SizedBox(height: 10),
+                    Text('Generated ${_fmtDate(rec.generatedAt)} · advisory only, not a final decision',
+                        style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

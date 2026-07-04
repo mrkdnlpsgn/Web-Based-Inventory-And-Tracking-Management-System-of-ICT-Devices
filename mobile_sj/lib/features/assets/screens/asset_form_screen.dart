@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../model/asset_model.dart';
 import '../data/asset_service.dart';
 import '../provider/asset_provider.dart';
+import '../../../shared/data/reference_service.dart';
 import '../../../shared/provider/reference_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_exception.dart';
@@ -25,7 +27,6 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   late final TextEditingController _unitValue;
   late final TextEditingController _accountablePerson;
   late final TextEditingController _physicalCount;
-  late final TextEditingController _location;
   late final TextEditingController _remarks;
 
   int? _categoryId;
@@ -33,6 +34,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   String _condition = 'SERVICEABLE';
   String _lifecycleStatus = 'REGISTERED';
   DateTime? _acquisitionDate;
+
+  Timer? _categoryDebounce;
+  CategoryModel? _suggestedCategory;
 
   bool get _isEdit => widget.asset != null;
 
@@ -46,7 +50,6 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     _unitValue = TextEditingController(text: a?.unitValue.toStringAsFixed(2) ?? '');
     _accountablePerson = TextEditingController(text: a?.accountablePerson ?? '');
     _physicalCount = TextEditingController(text: a?.physicalCount?.toString() ?? '');
-    _location = TextEditingController(text: a?.location ?? '');
     _remarks = TextEditingController(text: a?.remarks ?? '');
     _categoryId = a?.category.id;
     _officeId = a?.office.id;
@@ -55,15 +58,36 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     if (a?.acquisitionDate != null) {
       _acquisitionDate = DateTime.tryParse(a!.acquisitionDate);
     }
+    _description.addListener(_onDescriptionChanged);
   }
 
   @override
   void dispose() {
+    _categoryDebounce?.cancel();
     for (final c in [_propertyNumber, _description, _quantity, _unitValue,
-        _accountablePerson, _physicalCount, _location, _remarks]) {
+        _accountablePerson, _physicalCount, _remarks]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  void _onDescriptionChanged() {
+    _categoryDebounce?.cancel();
+    final text = _description.text.trim();
+    if (text.length < 3) {
+      if (_suggestedCategory != null) setState(() => _suggestedCategory = null);
+      return;
+    }
+    _categoryDebounce = Timer(const Duration(milliseconds: 700), () async {
+      try {
+        final suggestion = await ReferenceService().suggestCategory(text);
+        if (mounted && suggestion.id != _categoryId) {
+          setState(() => _suggestedCategory = suggestion);
+        }
+      } catch (_) {
+        // Best-effort convenience feature — stay silent on failure.
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -74,6 +98,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     }
     setState(() => _loading = true);
     try {
+      final offices = ref.read(officesProvider).value ?? [];
+      final officeName = offices.where((o) => o.id == _officeId).firstOrNull?.officeName ?? '';
       final data = {
         'propertyNumber': _propertyNumber.text.trim(),
         'description': _description.text.trim(),
@@ -84,7 +110,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
         'officeId': _officeId,
         'accountablePerson': _accountablePerson.text.trim().isEmpty ? null : _accountablePerson.text.trim(),
         'physicalCount': _physicalCount.text.trim().isEmpty ? null : int.parse(_physicalCount.text.trim()),
-        'location': _location.text.trim(),
+        'location': officeName,
         'condition': _condition,
         'lifecycleStatus': _lifecycleStatus,
         'remarks': _remarks.text.trim().isEmpty ? null : _remarks.text.trim(),
@@ -135,19 +161,22 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                   value: categories.where((c) => c.id == _categoryId).firstOrNull,
                   items: categories,
                   itemLabel: (c) => c.categoryName,
-                  onChanged: (c) => setState(() => _categoryId = c?.id),
+                  onChanged: (c) => setState(() {
+                    _categoryId = c?.id;
+                    _suggestedCategory = null;
+                  }),
                 ),
+                if (_suggestedCategory != null) _categorySuggestionChip(),
                 _field(_quantity, 'Quantity', keyboardType: TextInputType.number, required: true),
                 _datePicker(),
                 _field(_unitValue, 'Unit Value (₱)', keyboardType: TextInputType.number, required: true),
                 _dropdown<OfficeModel>(
-                  label: 'Office',
+                  label: 'Location',
                   value: offices.where((o) => o.id == _officeId).firstOrNull,
                   items: offices,
                   itemLabel: (o) => o.officeName,
                   onChanged: (o) => setState(() => _officeId = o?.id),
                 ),
-                _field(_location, 'Location', required: true),
                 _field(_accountablePerson, 'Accountable Person'),
                 _field(_physicalCount, 'Physical Count', keyboardType: TextInputType.number),
                 _enumDropdown('Condition', _condition,
@@ -191,6 +220,40 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     );
   }
 
+  Widget _categorySuggestionChip() {
+    final suggestion = _suggestedCategory!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() {
+          _categoryId = suggestion.id;
+          _suggestedCategory = null;
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.brand.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.brand.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.auto_awesome_rounded, size: 14, color: AppTheme.brand),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text('Suggested: ${suggestion.categoryName} · tap to apply',
+                    style: const TextStyle(color: AppTheme.brand, fontSize: 12, fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _dropdown<T>({
     required String label,
     required T? value,
@@ -202,9 +265,13 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<T>(
         initialValue: value,
+        isExpanded: true,
         decoration: InputDecoration(labelText: label),
         dropdownColor: AppTheme.surface,
-        items: items.map((e) => DropdownMenuItem(value: e, child: Text(itemLabel(e)))).toList(),
+        items: items.map((e) => DropdownMenuItem(
+          value: e,
+          child: Text(itemLabel(e), overflow: TextOverflow.ellipsis),
+        )).toList(),
         onChanged: onChanged,
         validator: (v) => v == null ? 'Required' : null,
       ),

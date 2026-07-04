@@ -23,6 +23,16 @@ dependencies:
   # Navigation
   go_router: ^13.2.4
 
+  # Report export (Excel / PDF, mirrors web Reports page)
+  excel: ^4.0.6
+  pdf: ^3.11.1
+  printing: ^5.13.1
+  share_plus: ^10.1.2
+
+  # QR scan-to-status lookup (camera scanning; Android/iOS/web — falls back to manual
+  # entry on desktop platforms mobile_scanner doesn't support, e.g. Windows)
+  mobile_scanner: ^5.2.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

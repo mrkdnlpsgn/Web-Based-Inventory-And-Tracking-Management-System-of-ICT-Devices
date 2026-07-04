@@ -109,10 +109,12 @@ public class SecurityConfig {
                 // Maintenance, Disposal: read for authenticated, mutations ADMIN only
                 .requestMatchers(HttpMethod.GET, "/api/maintenance/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/maintenance").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/maintenance/*/summary").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/maintenance/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/maintenance/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/disposal/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/disposal").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/disposal/*/justification").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/disposal/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/disposal/**").hasRole("ADMIN")
                 // Asset history: all authenticated

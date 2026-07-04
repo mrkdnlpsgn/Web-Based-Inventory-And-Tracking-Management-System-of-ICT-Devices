@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../model/disposal_model.dart';
 import '../provider/disposal_provider.dart';
+import '../provider/disposal_justification_provider.dart';
 import '../screens/disposal_form_screen.dart';
 import '../data/disposal_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -106,6 +107,8 @@ class _Body extends StatelessWidget {
         _card('Reason for Disposal', [], body: item.reason),
         const SizedBox(height: 12),
         _card('Inspection Findings', [], body: item.inspectionFindings),
+        const SizedBox(height: 12),
+        _AiJustificationCard(disposalId: item.id),
         const SizedBox(height: 24),
       ],
     );
@@ -150,4 +153,110 @@ class _Body extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _AiJustificationCard extends ConsumerStatefulWidget {
+  final int disposalId;
+  const _AiJustificationCard({required this.disposalId});
+
+  @override
+  ConsumerState<_AiJustificationCard> createState() => _AiJustificationCardState();
+}
+
+class _AiJustificationCardState extends ConsumerState<_AiJustificationCard> {
+  bool _generating = false;
+
+  Future<void> _generate() async {
+    setState(() => _generating = true);
+    try {
+      await ref.read(disposalJustificationServiceProvider).generate(widget.disposalId);
+      ref.invalidate(disposalJustificationProvider(widget.disposalId));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Colors.red.shade800,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  String _fmtDate(String raw) {
+    try {
+      final dt = DateTime.parse(raw);
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = ref.watch(authProvider).value?.isAdmin ?? false;
+    final justAsync = ref.watch(disposalJustificationProvider(widget.disposalId));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, size: 16, color: AppTheme.brand),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('AI DISPOSAL JUSTIFICATION',
+                      style: TextStyle(color: Colors.white54, fontSize: 12,
+                          fontWeight: FontWeight.w600, letterSpacing: 0.8)),
+                ),
+                if (isAdmin)
+                  _generating
+                      ? const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brand))
+                      : IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white54),
+                          tooltip: 'Generate justification',
+                          onPressed: _generate,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            justAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
+              ),
+              error: (e, _) => Text(e.toString(), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              data: (just) {
+                if (just == null) {
+                  return Text(
+                    isAdmin
+                        ? 'No justification drafted yet. Tap refresh to generate one.'
+                        : 'No justification drafted yet.',
+                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(just.justification,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+                    const SizedBox(height: 10),
+                    Text('Generated ${_fmtDate(just.generatedAt)} · draft for review, not a final decision',
+                        style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

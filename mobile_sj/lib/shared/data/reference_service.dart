@@ -23,4 +23,13 @@ class ReferenceService {
       throw ApiException.from(e);
     }
   }
+
+  Future<CategoryModel> suggestCategory(String description) async {
+    try {
+      final res = await _dio.post('/categories/suggest', data: {'description': description});
+      return CategoryModel.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      throw ApiException.from(e);
+    }
+  }
 }

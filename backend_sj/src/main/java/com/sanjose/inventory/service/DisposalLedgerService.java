@@ -45,6 +45,12 @@ public class DisposalLedgerService {
             a.setId(assetId);
             a.setPropertyNumber(rs.getString("asset_propertyNumber"));
             a.setDescription(rs.getString("asset_description"));
+            a.setQuantity(rs.getObject("asset_quantity", Integer.class));
+            a.setUnitValue(rs.getBigDecimal("asset_unitValue"));
+            Date acqDate = rs.getDate("asset_acquisitionDate");
+            a.setAcquisitionDate(acqDate != null ? acqDate.toLocalDate() : null);
+            String assetCondition = rs.getString("asset_condition");
+            a.setCondition(assetCondition != null ? Asset.AssetCondition.valueOf(assetCondition) : null);
             d.setAsset(a);
         }
 

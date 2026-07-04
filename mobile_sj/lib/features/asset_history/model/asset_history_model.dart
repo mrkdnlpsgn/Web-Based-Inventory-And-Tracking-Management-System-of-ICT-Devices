@@ -1,3 +1,4 @@
+import '../../assets/model/asset_model.dart';
 import '../../maintenance/model/maintenance_model.dart';
 
 class HistoryOfficeModel {
@@ -14,6 +15,7 @@ class HistoryOfficeModel {
 
 class AssetHistoryModel {
   final int id;
+  final AssetModel asset;
   final String eventType; // REGISTERED | ASSIGNED | TRANSFERRED | MAINTENANCE | DISPOSAL | ARCHIVED
   final HistoryOfficeModel? fromOffice;
   final HistoryOfficeModel? toOffice;
@@ -23,6 +25,7 @@ class AssetHistoryModel {
 
   const AssetHistoryModel({
     required this.id,
+    required this.asset,
     required this.eventType,
     this.fromOffice,
     this.toOffice,
@@ -33,6 +36,7 @@ class AssetHistoryModel {
 
   factory AssetHistoryModel.fromJson(Map<String, dynamic> json) => AssetHistoryModel(
         id: json['id'] as int,
+        asset: AssetModel.fromJson(json['asset'] as Map<String, dynamic>),
         eventType: json['eventType'] as String,
         fromOffice: json['fromOffice'] != null
             ? HistoryOfficeModel.fromJson(json['fromOffice'] as Map<String, dynamic>)

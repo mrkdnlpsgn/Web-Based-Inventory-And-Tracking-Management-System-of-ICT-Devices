@@ -10,8 +10,10 @@ import '../../features/maintenance/screens/maintenance_list_screen.dart';
 import '../../features/maintenance/screens/maintenance_detail_screen.dart';
 import '../../features/disposal/screens/disposal_list_screen.dart';
 import '../../features/disposal/screens/disposal_detail_screen.dart';
-import '../../features/equipment/screens/equipment_list_screen.dart';
-import '../../features/equipment/screens/equipment_detail_screen.dart';
+import '../../features/accounts/screens/account_list_screen.dart';
+import '../../features/reports/screens/reports_list_screen.dart';
+import '../../features/reports/screens/report_preview_screen.dart';
+import '../../features/qr_scanner/screens/qr_scanner_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
@@ -37,11 +39,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/disposal/:id',
         builder: (_, state) => DisposalDetailScreen(disposalId: int.parse(state.pathParameters['id']!)),
       ),
-      GoRoute(path: '/equipment', builder: (_, __) => const EquipmentListScreen()),
+      GoRoute(path: '/accounts', builder: (_, __) => const AccountListScreen()),
+      GoRoute(path: '/reports', builder: (_, __) => const ReportsListScreen()),
       GoRoute(
-        path: '/equipment/:id',
-        builder: (_, state) => EquipmentDetailScreen(equipmentId: int.parse(state.pathParameters['id']!)),
+        path: '/reports/:id',
+        builder: (_, state) => ReportPreviewScreen(reportId: state.pathParameters['id']!),
       ),
+      GoRoute(path: '/qr-scanner', builder: (_, __) => const QrScannerScreen()),
     ],
   );
 });
