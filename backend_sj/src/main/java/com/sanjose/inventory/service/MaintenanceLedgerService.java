@@ -24,6 +24,7 @@ public class MaintenanceLedgerService {
 
     private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
+    private final AssetHistoryService assetHistoryService;
 
     private static final RowMapper<MaintenanceLedger> MAINT_MAPPER = (rs, rn) -> {
         MaintenanceLedger m = new MaintenanceLedger();
@@ -63,9 +64,10 @@ public class MaintenanceLedgerService {
         return m;
     };
 
-    public List<MaintenanceLedger> findAll(String search, int page, int size) {
-        return jdbcTemplate.query("CALL sp_maintenance_list(?, ?, ?)", MAINT_MAPPER,
-            search, size, page * size);
+    public List<MaintenanceLedger> findAll(String search, int page, int size,
+                                            String maintenanceType, String status) {
+        return jdbcTemplate.query("CALL sp_maintenance_list(?, ?, ?, ?, ?)", MAINT_MAPPER,
+            search, size, page * size, maintenanceType, status);
     }
 
     public List<MaintenanceLedger> findByAsset(Long assetId) {
@@ -96,6 +98,8 @@ public class MaintenanceLedgerService {
             recorderId != null ? recorderId.intValue() : 0);
 
         MaintenanceLedger saved = findById(newId);
+        assetHistoryService.logEvent(req.getAssetId(), "MAINTENANCE", null, null, recorderId,
+            "Maintenance logged (" + req.getMaintenanceType() + "): " + req.getFindings());
         auditLogService.log("MAINTENANCE_CREATED", "Maintenance", newId, "maintenance",
             "Maintenance for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : req.getAssetId()));
         return saved;

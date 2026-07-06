@@ -20,8 +20,12 @@ public class AssetController {
     @GetMapping
     public List<Asset> getAll(@RequestParam(required = false) String search,
                                @RequestParam(defaultValue = "0") int page,
-                               @RequestParam(defaultValue = "20") int size) {
-        return assetService.findAll(search, page, size);
+                               @RequestParam(defaultValue = "20") int size,
+                               @RequestParam(required = false) Long categoryId,
+                               @RequestParam(required = false) Long officeId,
+                               @RequestParam(required = false) String condition,
+                               @RequestParam(required = false) String lifecycleStatus) {
+        return assetService.findAll(search, page, size, categoryId, officeId, condition, lifecycleStatus);
     }
 
     @GetMapping("/{id}")

@@ -6,12 +6,24 @@ import '../model/asset_model.dart';
 class AssetService {
   final Dio _dio = ApiClient.instance.dio;
 
-  Future<List<AssetModel>> getAll({String? search, int page = 0, int size = 20}) async {
+  Future<List<AssetModel>> getAll({
+    String? search,
+    int page = 0,
+    int size = 20,
+    int? categoryId,
+    int? officeId,
+    String? condition,
+    String? lifecycleStatus,
+  }) async {
     try {
       final res = await _dio.get('/assets', queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         'page': page,
         'size': size,
+        if (categoryId != null) 'categoryId': categoryId,
+        if (officeId != null) 'officeId': officeId,
+        if (condition != null && condition.isNotEmpty) 'condition': condition,
+        if (lifecycleStatus != null && lifecycleStatus.isNotEmpty) 'lifecycleStatus': lifecycleStatus,
       });
       return (res.data as List).map((e) => AssetModel.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../model/account_model.dart';
 import '../data/account_service.dart';
@@ -64,17 +65,74 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
         if (_password.text.trim().isNotEmpty) 'password': _password.text.trim(),
       };
       final service = AccountService();
+      final usedDefaultPassword = !_isEdit && _password.text.trim().isEmpty;
       if (_isEdit) {
         await service.update(widget.account!.id, data);
       } else {
         await service.create(data);
       }
+      if (!mounted) return;
+      if (usedDefaultPassword) await _showDefaultPasswordDialog();
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
       _showError(e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _showDefaultPasswordDialog() {
+    const defaultPassword = 'changeme123';
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.surface,
+        title: const Text('Account Created'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${_username.text.trim()} was assigned a default password. Share it with them securely, '
+                'and have them change it after first login.',
+                style: TextStyle(color: context.colors.textSecondary)),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: context.colors.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: context.colors.border),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(defaultPassword,
+                        style: TextStyle(fontWeight: FontWeight.w600, fontFamily: 'monospace', fontSize: 15)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    tooltip: 'Copy',
+                    onPressed: () {
+                      Clipboard.setData(const ClipboardData(text: defaultPassword));
+                      ScaffoldMessenger.of(ctx)
+                          .showSnackBar(const SnackBar(content: Text('Password copied')));
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleActive() async {
@@ -167,7 +225,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
               _field(_password, 'Password',
                   required: !_isEdit,
                   obscure: true,
-                  hint: _isEdit ? 'Leave blank to keep current password' : 'Leave blank for default: changeme123'),
+                  hint: _isEdit ? 'Leave blank to keep current password' : 'Leave blank to assign a default password'),
               _dropdown<String>(
                 label: 'Role',
                 value: _role,
@@ -187,7 +245,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
                 value: _isActive,
                 onChanged: isSelf ? null : (v) => setState(() => _isActive = v),
                 activeThumbColor: AppTheme.brand,
-                title: const Text('Active', style: TextStyle(color: Colors.white)),
+                title: Text('Active', style: TextStyle(color: context.colors.textPrimary)),
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 24),
@@ -237,7 +295,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
         initialValue: value,
         isExpanded: true,
         decoration: InputDecoration(labelText: label),
-        dropdownColor: AppTheme.surface,
+        dropdownColor: context.colors.surface,
         items: items.map((e) => DropdownMenuItem(
           value: e,
           child: Text(itemLabel(e), overflow: TextOverflow.ellipsis),

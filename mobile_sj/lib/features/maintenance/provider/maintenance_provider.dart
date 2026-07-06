@@ -7,11 +7,19 @@ final maintenanceServiceProvider = Provider<MaintenanceService>((ref) => Mainten
 
 final maintenanceSearchProvider = StateProvider<String>((ref) => '');
 
+final maintenanceTypeFilterProvider = StateProvider<String?>((ref) => null);
+final maintenanceStatusFilterProvider = StateProvider<String?>((ref) => null);
+
 final maintenancePagedProvider = StateNotifierProvider.autoDispose
     .family<PaginatedListNotifier<MaintenanceModel>, PaginatedListState<MaintenanceModel>, String>((ref, search) {
   final service = ref.watch(maintenanceServiceProvider);
+  final maintenanceType = ref.watch(maintenanceTypeFilterProvider);
+  final status = ref.watch(maintenanceStatusFilterProvider);
   return PaginatedListNotifier<MaintenanceModel>(
-    (search, page, size) => service.getAll(search: search, page: page, size: size),
+    (search, page, size) => service.getAll(
+      search: search, page: page, size: size,
+      maintenanceType: maintenanceType, status: status,
+    ),
     search.isEmpty ? null : search,
   );
 });

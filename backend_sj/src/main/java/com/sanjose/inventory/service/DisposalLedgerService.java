@@ -24,6 +24,7 @@ public class DisposalLedgerService {
 
     private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
+    private final AssetHistoryService assetHistoryService;
 
     private static final RowMapper<DisposalLedger> DISPOSAL_MAPPER = (rs, rn) -> {
         DisposalLedger d = new DisposalLedger();
@@ -64,13 +65,17 @@ public class DisposalLedgerService {
         }
 
         d.setApprovedBy(rs.getString("approvedBy"));
+        d.setAppraisedValue(rs.getBigDecimal("appraisedValue"));
+        d.setOrNumber(rs.getString("orNumber"));
+        d.setAmount(rs.getBigDecimal("amount"));
 
         return d;
     };
 
-    public List<DisposalLedger> findAll(String search, int page, int size) {
-        return jdbcTemplate.query("CALL sp_disposal_list(?, ?, ?)", DISPOSAL_MAPPER,
-            search, size, page * size);
+    public List<DisposalLedger> findAll(String search, int page, int size,
+                                         String recommendedMethod, String disposalStatus) {
+        return jdbcTemplate.query("CALL sp_disposal_list(?, ?, ?, ?, ?)", DISPOSAL_MAPPER,
+            search, size, page * size, recommendedMethod, disposalStatus);
     }
 
     public List<DisposalLedger> findByAsset(Long assetId) {
@@ -89,7 +94,7 @@ public class DisposalLedgerService {
         Long recorderId = getUserIdByUsername(username);
 
         Long newId = SpHelper.callWithOutLong(jdbcTemplate,
-            "CALL sp_disposal_create(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "CALL sp_disposal_create(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             req.getAssetId(),
             req.getReason(),
             req.getInspectionFindings(),
@@ -97,9 +102,14 @@ public class DisposalLedgerService {
             req.getDisposalStatus() != null ? req.getDisposalStatus() : "PENDING",
             req.getInspectionDate(),
             req.getApprovedBy(),
-            recorderId != null ? recorderId.intValue() : 0);
+            recorderId != null ? recorderId.intValue() : 0,
+            req.getAppraisedValue(),
+            req.getOrNumber(),
+            req.getAmount());
 
         DisposalLedger saved = findById(newId);
+        assetHistoryService.logEvent(req.getAssetId(), "DISPOSAL", null, null, recorderId,
+            "Disposal logged (" + req.getRecommendedMethod() + "): " + req.getReason());
         auditLogService.log("DISPOSAL_CREATED", "Disposal", newId, "disposal",
             "Disposal for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : req.getAssetId()));
         return saved;
@@ -107,14 +117,17 @@ public class DisposalLedgerService {
 
     public DisposalLedger update(Long id, DisposalLedgerRequest req) {
         findById(id); // throws if not found
-        jdbcTemplate.update("CALL sp_disposal_update(?, ?, ?, ?, ?, ?, ?)",
+        jdbcTemplate.update("CALL sp_disposal_update(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             id,
             req.getReason(),
             req.getInspectionFindings(),
             req.getRecommendedMethod(),
             req.getDisposalStatus() != null ? req.getDisposalStatus() : "PENDING",
             req.getInspectionDate(),
-            req.getApprovedBy());
+            req.getApprovedBy(),
+            req.getAppraisedValue(),
+            req.getOrNumber(),
+            req.getAmount());
         DisposalLedger saved = findById(id);
         auditLogService.log("DISPOSAL_UPDATED", "Disposal", id, "disposal",
             "Updated disposal for asset: " + (saved.getAsset() != null ? saved.getAsset().getPropertyNumber() : ""));

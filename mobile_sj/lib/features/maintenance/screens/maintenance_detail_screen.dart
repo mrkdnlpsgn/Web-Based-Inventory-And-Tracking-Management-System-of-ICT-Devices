@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../model/maintenance_model.dart';
 import '../provider/maintenance_provider.dart';
 import '../provider/maintenance_summary_provider.dart';
-import '../screens/maintenance_form_screen.dart';
 import '../data/maintenance_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/delete_dialog.dart';
+import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/error_state.dart';
 import '../../auth/provider/auth_provider.dart';
 
 class MaintenanceDetailScreen extends ConsumerWidget {
@@ -26,8 +27,7 @@ class MaintenanceDetailScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () async {
-                final result = await Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => MaintenanceFormScreen(maintenance: async.value)));
+                final result = await context.push<bool>('/maintenance/$maintenanceId/edit', extra: async.value);
                 if (result == true) ref.invalidate(maintenanceDetailProvider(maintenanceId));
               },
             ),
@@ -41,8 +41,10 @@ class MaintenanceDetailScreen extends ConsumerWidget {
                   ref.invalidate(maintenancePagedProvider(ref.read(maintenanceSearchProvider)));
                   if (context.mounted) context.pop();
                 } catch (e) {
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade800));
+                  }
                 }
               },
             ),
@@ -51,7 +53,10 @@ class MaintenanceDetailScreen extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-        error: (err, _) => Center(child: Text(err.toString(), style: const TextStyle(color: Colors.white54))),
+        error: (err, _) => ErrorState(
+          message: err.toString(),
+          onRetry: () => ref.invalidate(maintenanceDetailProvider(maintenanceId)),
+        ),
         data: (item) => _Body(item: item),
       ),
     );
@@ -61,12 +66,6 @@ class MaintenanceDetailScreen extends ConsumerWidget {
 class _Body extends StatelessWidget {
   final MaintenanceModel item;
   const _Body({required this.item});
-
-  Color get _statusColor => switch (item.status) {
-        'COMPLETED' => AppTheme.brand,
-        'ONGOING' => AppTheme.statusMaintenance,
-        _ => AppTheme.statusAssigned,
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -81,14 +80,14 @@ class _Body extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _chip(item.maintenanceType.replaceAll('_', ' '), AppTheme.statusAssigned),
+                    StatusBadge.maintenanceType(item.maintenanceType),
                     const SizedBox(width: 8),
-                    _chip(item.status, _statusColor),
+                    StatusBadge.maintenanceStatus(item.status),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(item.asset.description,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: context.colors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(item.asset.propertyNumber,
                     style: const TextStyle(color: AppTheme.brand, fontSize: 13)),
@@ -97,16 +96,16 @@ class _Body extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _card('Maintenance Info', [
-          _row('Date', item.maintenanceDate),
-          if (item.assignedTo != null) _row('Assigned To', item.assignedTo!),
-          if (item.cost != null) _row('Cost', '₱${item.cost!.toStringAsFixed(2)}'),
-          _row('Recorded By', item.recordedBy.fullName),
+        _card(context, 'Maintenance Info', [
+          _row(context, 'Date', item.maintenanceDate),
+          if (item.assignedTo != null) _row(context, 'Assigned To', item.assignedTo!),
+          if (item.cost != null) _row(context, 'Cost', '₱${item.cost!.toStringAsFixed(2)}'),
+          _row(context, 'Recorded By', item.recordedBy.fullName),
         ]),
         const SizedBox(height: 12),
-        _card('Findings', [], body: item.findings),
+        _card(context, 'Findings', [], body: item.findings),
         const SizedBox(height: 12),
-        _card('Actions Taken', [], body: item.actionsTaken),
+        _card(context, 'Actions Taken', [], body: item.actionsTaken),
         const SizedBox(height: 12),
         _AiSummaryCard(maintenanceId: item.id),
         const SizedBox(height: 24),
@@ -114,28 +113,18 @@ class _Body extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
-        child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-      );
-
-  Widget _card(String title, List<Widget> rows, {String? body}) => Card(
+  Widget _card(BuildContext context, String title, List<Widget> rows, {String? body}) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title,
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8)),
+                  style: TextStyle(
+                      color: context.colors.textTertiary, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8)),
               const SizedBox(height: 12),
               if (body != null)
-                Text(body, style: const TextStyle(color: Colors.white70, height: 1.5))
+                Text(body, style: TextStyle(color: context.colors.textSecondary, height: 1.5))
               else
                 ...rows,
             ],
@@ -143,13 +132,13 @@ class _Body extends StatelessWidget {
         ),
       );
 
-  Widget _row(String label, String value) => Padding(
+  Widget _row(BuildContext context, String label, String value) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 140, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13))),
-            Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13))),
+            SizedBox(width: 140, child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 13))),
+            Expanded(child: Text(value, style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
           ],
         ),
       );
@@ -183,6 +172,15 @@ class _AiSummaryCardState extends ConsumerState<_AiSummaryCard> {
     }
   }
 
+  String _fmtDate(String raw) {
+    try {
+      final dt = DateTime.parse(raw);
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(authProvider).value?.isAdmin ?? false;
@@ -198,9 +196,9 @@ class _AiSummaryCardState extends ConsumerState<_AiSummaryCard> {
               children: [
                 const Icon(Icons.auto_awesome_rounded, size: 16, color: AppTheme.brand),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text('AI SUMMARY',
-                      style: TextStyle(color: Colors.white54, fontSize: 12,
+                      style: TextStyle(color: context.colors.textTertiary, fontSize: 12,
                           fontWeight: FontWeight.w600, letterSpacing: 0.8)),
                 ),
                 if (isAdmin)
@@ -208,7 +206,7 @@ class _AiSummaryCardState extends ConsumerState<_AiSummaryCard> {
                       ? const SizedBox(width: 16, height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brand))
                       : IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white54),
+                          icon: Icon(Icons.refresh_rounded, size: 18, color: context.colors.textTertiary),
                           tooltip: 'Generate summary',
                           onPressed: _generate,
                           visualDensity: VisualDensity.compact,
@@ -223,16 +221,24 @@ class _AiSummaryCardState extends ConsumerState<_AiSummaryCard> {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
               ),
-              error: (e, _) => Text(e.toString(), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              error: (e, _) => Text(e.toString(), style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
               data: (summary) {
                 if (summary == null) {
                   return Text(
                     isAdmin ? 'No summary yet. Tap refresh to generate one.' : 'No summary generated yet.',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                   );
                 }
-                return Text(summary.summary,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5));
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(summary.summary,
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 13, height: 1.5)),
+                    const SizedBox(height: 10),
+                    Text('Generated ${_fmtDate(summary.generatedAt)} · draft for review, not a final decision',
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 11)),
+                  ],
+                );
               },
             ),
           ],

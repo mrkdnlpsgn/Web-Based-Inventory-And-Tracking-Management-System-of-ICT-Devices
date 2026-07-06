@@ -264,7 +264,11 @@ END $$
 DROP PROCEDURE IF EXISTS sp_assets_get_all $$
 DROP PROCEDURE IF EXISTS sp_assets_search $$
 DROP PROCEDURE IF EXISTS sp_assets_list $$
-CREATE PROCEDURE sp_assets_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
+CREATE PROCEDURE sp_assets_list(
+    IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT,
+    IN p_category_id INT, IN p_office_id INT,
+    IN p_condition VARCHAR(20), IN p_lifecycle_status VARCHAR(30)
+)
 BEGIN
     SET p_search = TRIM(p_search);
     SELECT a.asset_id AS id, a.property_number AS propertyNumber, a.`description`,
@@ -290,6 +294,10 @@ BEGIN
         OR c.category_name   LIKE CONCAT('%', p_search, '%')
         OR o.office_name     LIKE CONCAT('%', p_search, '%')
       )
+      AND (p_category_id IS NULL OR a.category_id = p_category_id)
+      AND (p_office_id IS NULL OR a.office_id = p_office_id)
+      AND (p_condition IS NULL OR p_condition = '' OR a.`condition` = p_condition)
+      AND (p_lifecycle_status IS NULL OR p_lifecycle_status = '' OR a.lifecycle_status = p_lifecycle_status)
     ORDER BY a.created_at DESC
     LIMIT p_limit OFFSET p_offset;
 END $$
@@ -475,7 +483,10 @@ END $$
 DROP PROCEDURE IF EXISTS sp_maintenance_get_all $$
 DROP PROCEDURE IF EXISTS sp_maintenance_search $$
 DROP PROCEDURE IF EXISTS sp_maintenance_list $$
-CREATE PROCEDURE sp_maintenance_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
+CREATE PROCEDURE sp_maintenance_list(
+    IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT,
+    IN p_maintenance_type VARCHAR(20), IN p_status VARCHAR(20)
+)
 BEGIN
     SET p_search = TRIM(p_search);
     SELECT m.maintenance_id AS id, m.maintenance_type AS maintenanceType,
@@ -497,6 +508,8 @@ BEGIN
         OR a.`description` LIKE CONCAT('%', p_search, '%')
         OR r.full_name LIKE CONCAT('%', p_search, '%')
       )
+      AND (p_maintenance_type IS NULL OR p_maintenance_type = '' OR m.maintenance_type = p_maintenance_type)
+      AND (p_status IS NULL OR p_status = '' OR m.`status` = p_status)
     ORDER BY m.maintenance_date DESC
     LIMIT p_limit OFFSET p_offset;
 END $$
@@ -612,7 +625,10 @@ END $$
 DROP PROCEDURE IF EXISTS sp_disposal_get_all $$
 DROP PROCEDURE IF EXISTS sp_disposal_search $$
 DROP PROCEDURE IF EXISTS sp_disposal_list $$
-CREATE PROCEDURE sp_disposal_list(IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT)
+CREATE PROCEDURE sp_disposal_list(
+    IN p_search VARCHAR(255), IN p_limit INT, IN p_offset INT,
+    IN p_recommended_method VARCHAR(20), IN p_disposal_status VARCHAR(20)
+)
 BEGIN
     SET p_search = TRIM(p_search);
     SELECT d.disposal_id AS id, d.reason, d.inspection_findings AS inspectionFindings,
@@ -622,7 +638,8 @@ BEGIN
            a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
            a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
-           d.approved_by AS approvedBy
+           d.approved_by AS approvedBy,
+           d.appraised_value AS appraisedValue, d.or_number AS orNumber, d.amount AS amount
     FROM disposal_ledger d
     LEFT JOIN assets a ON d.asset_id = a.asset_id
     LEFT JOIN users r ON d.recorded_by = r.user_id
@@ -636,6 +653,8 @@ BEGIN
         OR a.`description` LIKE CONCAT('%', p_search, '%')
         OR r.full_name LIKE CONCAT('%', p_search, '%')
       )
+      AND (p_recommended_method IS NULL OR p_recommended_method = '' OR d.recommended_method = p_recommended_method)
+      AND (p_disposal_status IS NULL OR p_disposal_status = '' OR d.disposal_status = p_disposal_status)
     ORDER BY d.inspection_date DESC
     LIMIT p_limit OFFSET p_offset;
 END $$
@@ -650,7 +669,8 @@ BEGIN
            a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
            a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
-           d.approved_by AS approvedBy
+           d.approved_by AS approvedBy,
+           d.appraised_value AS appraisedValue, d.or_number AS orNumber, d.amount AS amount
     FROM disposal_ledger d
     LEFT JOIN assets a ON d.asset_id = a.asset_id
     LEFT JOIN users r ON d.recorded_by = r.user_id
@@ -667,7 +687,8 @@ BEGIN
            a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
            a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
-           d.approved_by AS approvedBy
+           d.approved_by AS approvedBy,
+           d.appraised_value AS appraisedValue, d.or_number AS orNumber, d.amount AS amount
     FROM disposal_ledger d
     LEFT JOIN assets a ON d.asset_id = a.asset_id
     LEFT JOIN users r ON d.recorded_by = r.user_id
@@ -680,16 +701,19 @@ CREATE PROCEDURE sp_disposal_create(
     IN p_asset_id INT, IN p_reason TEXT, IN p_inspection_findings TEXT,
     IN p_recommended_method VARCHAR(20), IN p_disposal_status VARCHAR(20),
     IN p_inspection_date DATE, IN p_approved_by VARCHAR(150), IN p_recorded_by INT,
+    IN p_appraised_value DECIMAL(12,2), IN p_or_number VARCHAR(50), IN p_amount DECIMAL(12,2),
     OUT p_id INT
 )
 BEGIN
     INSERT INTO disposal_ledger(
         asset_id, reason, inspection_findings, recommended_method,
         disposal_status, inspection_date, approved_by, recorded_by,
+        appraised_value, or_number, amount,
         is_deleted, created_at
     ) VALUES(
         p_asset_id, p_reason, p_inspection_findings, p_recommended_method,
         p_disposal_status, p_inspection_date, NULLIF(p_approved_by, ''), NULLIF(p_recorded_by, 0),
+        p_appraised_value, NULLIF(p_or_number, ''), p_amount,
         FALSE, NOW()
     );
     SET p_id = LAST_INSERT_ID();
@@ -699,13 +723,15 @@ DROP PROCEDURE IF EXISTS sp_disposal_update $$
 CREATE PROCEDURE sp_disposal_update(
     IN p_id INT, IN p_reason TEXT, IN p_inspection_findings TEXT,
     IN p_recommended_method VARCHAR(20), IN p_disposal_status VARCHAR(20),
-    IN p_inspection_date DATE, IN p_approved_by VARCHAR(150)
+    IN p_inspection_date DATE, IN p_approved_by VARCHAR(150),
+    IN p_appraised_value DECIMAL(12,2), IN p_or_number VARCHAR(50), IN p_amount DECIMAL(12,2)
 )
 BEGIN
     UPDATE disposal_ledger SET
         reason = p_reason, inspection_findings = p_inspection_findings,
         recommended_method = p_recommended_method, disposal_status = p_disposal_status,
-        inspection_date = p_inspection_date, approved_by = NULLIF(p_approved_by, '')
+        inspection_date = p_inspection_date, approved_by = NULLIF(p_approved_by, ''),
+        appraised_value = p_appraised_value, or_number = NULLIF(p_or_number, ''), amount = p_amount
     WHERE disposal_id = p_id AND is_deleted = FALSE;
 END $$
 
@@ -719,6 +745,7 @@ BEGIN
         reason, inspection_findings, recommended_method,
         disposal_status, inspection_date,
         approved_by_user_id, approved_by_name,
+        appraised_value, or_number, amount,
         recorded_by_user_id, recorded_by_name,
         original_created_at,
         deleted_by_user_id, deleted_by_username, delete_reason, deleted_at
@@ -727,6 +754,7 @@ BEGIN
            d.reason, d.inspection_findings, d.recommended_method,
            d.disposal_status, d.inspection_date,
            NULL, d.approved_by,
+           d.appraised_value, d.or_number, d.amount,
            d.recorded_by, r.full_name,
            d.created_at,
            p_deleted_by, p_deleted_by_username, p_reason, NOW()

@@ -20,8 +20,10 @@ public class DisposalLedgerController {
     @GetMapping
     public List<DisposalLedger> getAll(@RequestParam(required = false) String search,
                                         @RequestParam(defaultValue = "0") int page,
-                                        @RequestParam(defaultValue = "20") int size) {
-        return disposalLedgerService.findAll(search, page, size);
+                                        @RequestParam(defaultValue = "20") int size,
+                                        @RequestParam(required = false) String recommendedMethod,
+                                        @RequestParam(required = false) String disposalStatus) {
+        return disposalLedgerService.findAll(search, page, size, recommendedMethod, disposalStatus);
     }
 
     @GetMapping("/{id}")

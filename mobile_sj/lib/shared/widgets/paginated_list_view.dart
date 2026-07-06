@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../provider/paginated_list_notifier.dart';
+import 'skeleton.dart';
+import 'error_state.dart';
 
 class PaginatedListView<T> extends StatefulWidget {
   final PaginatedListState<T> state;
@@ -49,30 +51,15 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
     final s = widget.state;
 
     if (s.isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.brand));
+      return const ListSkeleton();
     }
 
     if (s.error != null && s.items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.white38),
-            const SizedBox(height: 12),
-            Text(s.error.toString(), style: const TextStyle(color: Colors.white54), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: widget.onRefresh,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      return ErrorState(message: s.error.toString(), onRetry: widget.onRefresh);
     }
 
     if (s.items.isEmpty) {
-      return Center(child: Text(widget.emptyMessage, style: const TextStyle(color: Colors.white54)));
+      return Center(child: Text(widget.emptyMessage, style: TextStyle(color: context.colors.textTertiary)));
     }
 
     return RefreshIndicator(
@@ -85,6 +72,27 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           if (i >= s.items.length) {
+            if (s.loadMoreError != null) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text("Couldn't load more.",
+                          style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      TextButton.icon(
+                        onPressed: widget.onLoadMore,
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Retry'),
+                        style: TextButton.styleFrom(foregroundColor: AppTheme.brand),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(

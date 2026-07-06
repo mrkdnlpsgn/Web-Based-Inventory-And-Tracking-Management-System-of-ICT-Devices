@@ -6,12 +6,20 @@ import '../model/maintenance_model.dart';
 class MaintenanceService {
   final Dio _dio = ApiClient.instance.dio;
 
-  Future<List<MaintenanceModel>> getAll({String? search, int page = 0, int size = 20}) async {
+  Future<List<MaintenanceModel>> getAll({
+    String? search,
+    int page = 0,
+    int size = 20,
+    String? maintenanceType,
+    String? status,
+  }) async {
     try {
       final res = await _dio.get('/maintenance', queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         'page': page,
         'size': size,
+        if (maintenanceType != null && maintenanceType.isNotEmpty) 'maintenanceType': maintenanceType,
+        if (status != null && status.isNotEmpty) 'status': status,
       });
       return (res.data as List).map((e) => MaintenanceModel.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {

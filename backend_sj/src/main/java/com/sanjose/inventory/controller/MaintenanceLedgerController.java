@@ -20,8 +20,10 @@ public class MaintenanceLedgerController {
     @GetMapping
     public List<MaintenanceLedger> getAll(@RequestParam(required = false) String search,
                                            @RequestParam(defaultValue = "0") int page,
-                                           @RequestParam(defaultValue = "20") int size) {
-        return maintenanceLedgerService.findAll(search, page, size);
+                                           @RequestParam(defaultValue = "20") int size,
+                                           @RequestParam(required = false) String maintenanceType,
+                                           @RequestParam(required = false) String status) {
+        return maintenanceLedgerService.findAll(search, page, size, maintenanceType, status);
     }
 
     @GetMapping("/{id}")

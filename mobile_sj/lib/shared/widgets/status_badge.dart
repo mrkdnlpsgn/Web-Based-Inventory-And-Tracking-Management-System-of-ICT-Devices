@@ -4,8 +4,9 @@ import '../../core/theme/app_theme.dart';
 class StatusBadge extends StatelessWidget {
   final String label;
   final Color color;
+  final bool dense;
 
-  const StatusBadge({super.key, required this.label, required this.color});
+  const StatusBadge({super.key, required this.label, required this.color, this.dense = false});
 
   static StatusBadge condition(String value) {
     final color = switch (value) {
@@ -45,20 +46,56 @@ class StatusBadge extends StatelessWidget {
     return StatusBadge(label: display, color: color);
   }
 
+  static StatusBadge maintenanceStatus(String value, {bool dense = false}) {
+    final color = switch (value) {
+      'COMPLETED' => AppTheme.brand,
+      'ONGOING' => AppTheme.statusMaintenance,
+      _ => AppTheme.statusAssigned,
+    };
+    return StatusBadge(label: value.replaceAll('_', ' '), color: color, dense: dense);
+  }
+
+  static StatusBadge maintenanceType(String value, {bool dense = false}) {
+    final color = switch (value) {
+      'PREVENTIVE' => AppTheme.statusAssigned,
+      'CORRECTIVE' => AppTheme.statusMaintenance,
+      _ => Colors.purple,
+    };
+    return StatusBadge(label: value.replaceAll('_', ' '), color: color, dense: dense);
+  }
+
+  static StatusBadge disposalStatus(String value, {bool dense = false}) {
+    final color = switch (value) {
+      'COMPLETED' => AppTheme.brand,
+      'APPROVED' => AppTheme.statusAssigned,
+      _ => AppTheme.statusMaintenance,
+    };
+    return StatusBadge(label: value.replaceAll('_', ' '), color: color, dense: dense);
+  }
+
+  static StatusBadge disposalMethod(String value, {bool dense = false}) {
+    final color = switch (value) {
+      'AUCTION' => AppTheme.statusMaintenance,
+      'DONATION' => AppTheme.brand,
+      _ => AppTheme.statusAssigned,
+    };
+    return StatusBadge(label: value.replaceAll('_', ' '), color: color, dense: dense);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: dense ? 8 : 10, vertical: dense ? 3 : 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(dense ? 5 : 6),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: color,
-          fontSize: 12,
+          fontSize: dense ? 11 : 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.2,
         ),

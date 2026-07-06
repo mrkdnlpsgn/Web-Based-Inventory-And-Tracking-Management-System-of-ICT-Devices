@@ -8,6 +8,7 @@ class PaginatedListState<T> {
   final bool isLoadingMore;
   final bool hasMore;
   final Object? error;
+  final Object? loadMoreError;
 
   const PaginatedListState({
     this.items = const [],
@@ -15,6 +16,7 @@ class PaginatedListState<T> {
     this.isLoadingMore = false,
     this.hasMore = true,
     this.error,
+    this.loadMoreError,
   });
 
   PaginatedListState<T> copyWith({
@@ -23,6 +25,7 @@ class PaginatedListState<T> {
     bool? isLoadingMore,
     bool? hasMore,
     Object? error,
+    Object? loadMoreError,
   }) {
     return PaginatedListState<T>(
       items: items ?? this.items,
@@ -30,6 +33,7 @@ class PaginatedListState<T> {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       hasMore: hasMore ?? this.hasMore,
       error: error,
+      loadMoreError: loadMoreError,
     );
   }
 }
@@ -64,7 +68,7 @@ class PaginatedListNotifier<T> extends StateNotifier<PaginatedListState<T>> {
 
   Future<void> loadMore() async {
     if (state.isLoadingMore || !state.hasMore || state.isLoading) return;
-    state = state.copyWith(isLoadingMore: true);
+    state = state.copyWith(isLoadingMore: true, loadMoreError: null);
     try {
       final nextPage = _page + 1;
       final items = await _fetch(_search, nextPage, paginatedPageSize);
@@ -74,8 +78,8 @@ class PaginatedListNotifier<T> extends StateNotifier<PaginatedListState<T>> {
         isLoadingMore: false,
         hasMore: items.length == paginatedPageSize,
       );
-    } catch (_) {
-      state = state.copyWith(isLoadingMore: false);
+    } catch (e) {
+      state = state.copyWith(isLoadingMore: false, loadMoreError: e);
     }
   }
 }

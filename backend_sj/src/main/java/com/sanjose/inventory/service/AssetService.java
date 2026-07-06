@@ -25,6 +25,7 @@ public class AssetService {
 
     private final JdbcTemplate jdbcTemplate;
     private final AuditLogService auditLogService;
+    private final AssetHistoryService assetHistoryService;
 
     private static final RowMapper<Asset> ASSET_MAPPER = (rs, rn) -> {
         Asset a = new Asset();
@@ -69,9 +70,10 @@ public class AssetService {
         return a;
     };
 
-    public List<Asset> findAll(String search, int page, int size) {
-        return jdbcTemplate.query("CALL sp_assets_list(?, ?, ?)", ASSET_MAPPER,
-            search, size, page * size);
+    public List<Asset> findAll(String search, int page, int size,
+                                Long categoryId, Long officeId, String condition, String lifecycleStatus) {
+        return jdbcTemplate.query("CALL sp_assets_list(?, ?, ?, ?, ?, ?, ?)", ASSET_MAPPER,
+            search, size, page * size, categoryId, officeId, condition, lifecycleStatus);
     }
 
     public Asset findById(Long id) {
@@ -92,6 +94,12 @@ public class AssetService {
 
         Asset saved = findById(newId);
         handleConditionLedger(saved);
+
+        Long recorderId = getUserIdByUsername(SecurityContextHolder.getContext().getAuthentication().getName());
+        assetHistoryService.logEvent(newId, "REGISTERED", null,
+            saved.getOffice() != null ? saved.getOffice().getId() : null,
+            recorderId, "Asset registered: " + saved.getPropertyNumber());
+
         auditLogService.log("ASSET_CREATED", "Assets", newId, "asset",
             "Created asset: " + saved.getPropertyNumber());
         return findById(newId); // re-fetch after potential lifecycle update
@@ -100,6 +108,7 @@ public class AssetService {
     public Asset update(Long id, AssetRequest req) {
         Asset before = findById(id);
         Asset.AssetCondition oldCondition = before.getCondition();
+        Long oldOfficeId = before.getOffice() != null ? before.getOffice().getId() : null;
 
         jdbcTemplate.update("CALL sp_assets_update(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             id,
@@ -114,6 +123,15 @@ public class AssetService {
         if (oldCondition != saved.getCondition()) {
             handleConditionLedger(saved);
         }
+
+        Long newOfficeId = saved.getOffice() != null ? saved.getOffice().getId() : null;
+        if (!java.util.Objects.equals(oldOfficeId, newOfficeId)) {
+            Long recorderId = getUserIdByUsername(SecurityContextHolder.getContext().getAuthentication().getName());
+            assetHistoryService.logEvent(id, "TRANSFERRED", oldOfficeId, newOfficeId, recorderId,
+                "Transferred from " + (before.getOffice() != null ? before.getOffice().getOfficeName() : "unassigned")
+                    + " to " + (saved.getOffice() != null ? saved.getOffice().getOfficeName() : "unassigned"));
+        }
+
         auditLogService.log("ASSET_UPDATED", "Assets", id, "asset",
             "Updated asset: " + saved.getPropertyNumber());
         return findById(id); // re-fetch after potential lifecycle update
@@ -148,18 +166,23 @@ public class AssetService {
                 null, LocalDate.now(), null, "ONGOING", recId);
             jdbcTemplate.update("CALL sp_assets_update_lifecycle(?, ?)",
                 asset.getId(), "UNDER_MAINTENANCE");
+            assetHistoryService.logEvent(asset.getId(), "MAINTENANCE", null, null, recorderId,
+                "Flagged repairable, maintenance record auto-created");
 
         } else if (asset.getCondition() == Asset.AssetCondition.UNSERVICEABLE) {
             jdbcTemplate.update("CALL sp_maintenance_delete_by_asset(?)", asset.getId());
             SpHelper.callWithOutLong(jdbcTemplate,
-                "CALL sp_disposal_create(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "CALL sp_disposal_create(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 asset.getId(),
                 "Asset is unserviceable and flagged for disposal",
                 "Auto-generated from asset condition change",
-                "DESTRUCTION", "PENDING",
-                LocalDate.now(), null, recId);
+                "AUCTION", "PENDING",
+                LocalDate.now(), null, recId,
+                null, null, null);
             jdbcTemplate.update("CALL sp_assets_update_lifecycle(?, ?)",
                 asset.getId(), "DISPOSED");
+            assetHistoryService.logEvent(asset.getId(), "DISPOSAL", null, null, recorderId,
+                "Flagged unserviceable, disposal record auto-created");
 
         } else if (asset.getCondition() == Asset.AssetCondition.SERVICEABLE) {
             jdbcTemplate.update("CALL sp_maintenance_delete_by_asset(?)", asset.getId());

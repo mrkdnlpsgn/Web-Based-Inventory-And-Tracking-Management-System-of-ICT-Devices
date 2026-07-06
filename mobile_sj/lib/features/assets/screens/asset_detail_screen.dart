@@ -3,15 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../model/asset_model.dart';
 import '../provider/asset_provider.dart';
-import '../screens/asset_form_screen.dart';
 import '../data/asset_service.dart';
 import '../provider/ai_recommendation_provider.dart';
+import '../model/ai_recommendation_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/delete_dialog.dart';
 import '../../auth/provider/auth_provider.dart';
 import '../../asset_history/model/asset_history_model.dart';
 import '../../asset_history/provider/asset_history_provider.dart';
+import '../widgets/asset_qr_sheet.dart';
+import '../../../shared/widgets/error_state.dart';
 
 class AssetDetailScreen extends ConsumerWidget {
   final int assetId;
@@ -26,6 +28,12 @@ class AssetDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Asset Detail'),
         actions: [
+          if (assetAsync.value != null)
+            IconButton(
+              icon: const Icon(Icons.qr_code_2_rounded),
+              tooltip: 'Show QR code',
+              onPressed: () => showAssetQrSheet(context, assetAsync.value!),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () {
@@ -37,8 +45,7 @@ class AssetDetailScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () async {
-                final result = await Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => AssetFormScreen(asset: assetAsync.value)));
+                final result = await context.push<bool>('/assets/$assetId/edit', extra: assetAsync.value);
                 if (result == true) ref.invalidate(assetDetailProvider(assetId));
               },
             ),
@@ -66,8 +73,12 @@ class AssetDetailScreen extends ConsumerWidget {
       ),
       body: assetAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-        error: (err, _) => Center(
-          child: Text(err.toString(), style: const TextStyle(color: Colors.white54), textAlign: TextAlign.center),
+        error: (err, _) => ErrorState(
+          message: err.toString(),
+          onRetry: () {
+            ref.invalidate(assetDetailProvider(assetId));
+            ref.invalidate(assetHistoryProvider(assetId));
+          },
         ),
         data: (asset) => _AssetDetailBody(asset: asset),
       ),
@@ -85,11 +96,11 @@ class _AssetDetailBody extends ConsumerWidget {
       length: 2,
       child: Column(
         children: [
-          const TabBar(
+          TabBar(
             indicatorColor: AppTheme.brand,
             labelColor: AppTheme.brand,
-            unselectedLabelColor: Colors.white38,
-            tabs: [
+            unselectedLabelColor: context.colors.textSecondary,
+            tabs: const [
               Tab(text: 'Details'),
               Tab(text: 'History'),
             ],
@@ -133,7 +144,7 @@ class _DetailsTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(asset.description,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: context.colors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 StatusBadge.condition(asset.condition),
               ],
@@ -143,18 +154,18 @@ class _DetailsTab extends StatelessWidget {
         const SizedBox(height: 12),
         _AiRecommendationCard(assetId: asset.id),
         const SizedBox(height: 12),
-        _card('Asset Details', [
-          _row('Category', asset.category.categoryName),
-          _row('Location', asset.office.officeName),
-          if (asset.accountablePerson != null) _row('Accountable Person', asset.accountablePerson!),
-          _row('Quantity', asset.quantity.toString()),
-          if (asset.physicalCount != null) _row('Physical Count', asset.physicalCount.toString()),
+        _card(context, 'Asset Details', [
+          _row(context, 'Category', asset.category.categoryName),
+          _row(context, 'Location', asset.office.officeName),
+          if (asset.accountablePerson != null) _row(context, 'Accountable Person', asset.accountablePerson!),
+          _row(context, 'Quantity', asset.quantity.toString()),
+          if (asset.physicalCount != null) _row(context, 'Physical Count', asset.physicalCount.toString()),
         ]),
         const SizedBox(height: 12),
-        _card('Financial', [
-          _row('Unit Value', '₱${asset.unitValue.toStringAsFixed(2)}'),
-          _row('Acquisition Date', asset.acquisitionDate),
-          _row('Total Value', '₱${(asset.unitValue * asset.quantity).toStringAsFixed(2)}'),
+        _card(context, 'Financial', [
+          _row(context, 'Unit Value', '₱${asset.unitValue.toStringAsFixed(2)}'),
+          _row(context, 'Acquisition Date', asset.acquisitionDate),
+          _row(context, 'Total Value', '₱${(asset.unitValue * asset.quantity).toStringAsFixed(2)}'),
         ]),
         if (asset.remarks != null && asset.remarks!.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -164,47 +175,47 @@ class _DetailsTab extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _sectionTitle('Remarks'),
-                  Text(asset.remarks!, style: const TextStyle(color: Colors.white70, height: 1.5)),
+                  _sectionTitle(context, 'Remarks'),
+                  Text(asset.remarks!, style: TextStyle(color: context.colors.textSecondary, height: 1.5)),
                 ],
               ),
             ),
           ),
         ],
         const SizedBox(height: 12),
-        _card('Record Info', [
-          _row('Created', _fmt(asset.createdAt)),
-          _row('Last Updated', _fmt(asset.updatedAt)),
+        _card(context, 'Record Info', [
+          _row(context, 'Created', _fmt(asset.createdAt)),
+          _row(context, 'Last Updated', _fmt(asset.updatedAt)),
         ]),
         const SizedBox(height: 24),
       ],
     );
   }
 
-  Widget _card(String title, List<Widget> rows) => Card(
+  Widget _card(BuildContext context, String title, List<Widget> rows) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [_sectionTitle(title), ...rows],
+            children: [_sectionTitle(context, title), ...rows],
           ),
         ),
       );
 
-  Widget _sectionTitle(String t) => Padding(
+  Widget _sectionTitle(BuildContext context, String t) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Text(t,
-            style: const TextStyle(color: Colors.white54, fontSize: 12,
+            style: TextStyle(color: context.colors.textTertiary, fontSize: 12,
                 fontWeight: FontWeight.w600, letterSpacing: 0.8)),
       );
 
-  Widget _row(String label, String value) => Padding(
+  Widget _row(BuildContext context, String label, String value) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 150, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13))),
-            Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13))),
+            SizedBox(width: 150, child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 13))),
+            Expanded(child: Text(value, style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
           ],
         ),
       );
@@ -228,9 +239,9 @@ class _HistoryTab extends ConsumerWidget {
     final historyAsync = ref.watch(assetHistoryProvider(assetId));
     return historyAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-      error: (err, _) => Center(child: Text(err.toString(), style: const TextStyle(color: Colors.white54))),
+      error: (err, _) => Center(child: Text(err.toString(), style: TextStyle(color: context.colors.textTertiary))),
       data: (history) => history.isEmpty
-          ? const Center(child: Text('No history available.', style: TextStyle(color: Colors.white54)))
+          ? Center(child: Text('No history available.', style: TextStyle(color: context.colors.textTertiary)))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: history.length,
@@ -286,7 +297,7 @@ class _HistoryTile extends StatelessWidget {
               ),
               if (!isLast)
                 Expanded(
-                  child: Container(width: 1, color: AppTheme.border, margin: const EdgeInsets.symmetric(vertical: 4)),
+                  child: Container(width: 1, color: context.colors.border, margin: const EdgeInsets.symmetric(vertical: 4)),
                 ),
             ],
           ),
@@ -301,31 +312,31 @@ class _HistoryTile extends StatelessWidget {
                   Text(item.eventType.replaceAll('_', ' '),
                       style: TextStyle(color: _eventColor, fontSize: 13, fontWeight: FontWeight.w600)),
                   Text(_fmt(item.eventDate),
-                      style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                   if (item.fromOffice != null || item.toOffice != null) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         if (item.fromOffice != null)
                           Text(item.fromOffice!.officeName,
-                              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                              style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
                         if (item.fromOffice != null && item.toOffice != null)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6),
-                            child: Icon(Icons.arrow_forward_rounded, size: 12, color: Colors.white38),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Icon(Icons.arrow_forward_rounded, size: 12, color: context.colors.textSecondary),
                           ),
                         if (item.toOffice != null)
                           Text(item.toOffice!.officeName,
-                              style: const TextStyle(color: Colors.white, fontSize: 12)),
+                              style: TextStyle(color: context.colors.textPrimary, fontSize: 12)),
                       ],
                     ),
                   ],
                   if (item.notes != null && item.notes!.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(item.notes!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text(item.notes!, style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
                   ],
                   Text('by ${item.performedBy.fullName}',
-                      style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 11)),
                 ],
               ),
             ),
@@ -355,14 +366,15 @@ class _AiRecommendationCard extends ConsumerStatefulWidget {
 
 class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
   bool _generating = false;
+  bool _autoGenerateAttempted = false;
 
-  Future<void> _generate() async {
+  Future<void> _generate({bool silent = false}) async {
     setState(() => _generating = true);
     try {
       await ref.read(aiRecommendationServiceProvider).generate(widget.assetId);
       ref.invalidate(aiRecommendationProvider(widget.assetId));
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e.toString()),
           backgroundColor: Colors.red.shade800,
@@ -405,6 +417,16 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
     final isAdmin = ref.watch(authProvider).value?.isAdmin ?? false;
     final recAsync = ref.watch(aiRecommendationProvider(widget.assetId));
 
+    ref.listen<AsyncValue<AiRecommendationModel?>>(
+      aiRecommendationProvider(widget.assetId),
+      (previous, next) {
+        if (isAdmin && !_generating && !_autoGenerateAttempted && next.hasValue && next.value == null) {
+          _autoGenerateAttempted = true;
+          _generate(silent: true);
+        }
+      },
+    );
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -415,9 +437,9 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
               children: [
                 const Icon(Icons.auto_awesome_rounded, size: 16, color: AppTheme.brand),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text('AI LIFECYCLE RECOMMENDATION',
-                      style: TextStyle(color: Colors.white54, fontSize: 12,
+                      style: TextStyle(color: context.colors.textTertiary, fontSize: 12,
                           fontWeight: FontWeight.w600, letterSpacing: 0.8)),
                 ),
                 if (isAdmin)
@@ -425,7 +447,7 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
                       ? const SizedBox(width: 16, height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brand))
                       : IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white54),
+                          icon: Icon(Icons.refresh_rounded, size: 18, color: context.colors.textTertiary),
                           tooltip: 'Generate recommendation',
                           onPressed: _generate,
                           visualDensity: VisualDensity.compact,
@@ -440,14 +462,27 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
               ),
-              error: (e, _) => Text(e.toString(), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              error: (e, _) => Text(e.toString(), style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
               data: (rec) {
                 if (rec == null) {
+                  if (_generating) {
+                    return Row(
+                      children: [
+                        const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brand),
+                        ),
+                        const SizedBox(width: 10),
+                        Text('Generating recommendation…',
+                            style: TextStyle(color: context.colors.textSecondary, fontSize: 13)),
+                      ],
+                    );
+                  }
                   return Text(
                     isAdmin
                         ? 'No recommendation yet. Tap refresh to generate one.'
                         : 'No recommendation generated yet.',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                   );
                 }
                 final color = _color(rec.recommendation);
@@ -465,10 +500,10 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
                           style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
                     ),
                     const SizedBox(height: 10),
-                    Text(rec.rationale, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+                    Text(rec.rationale, style: TextStyle(color: context.colors.textSecondary, fontSize: 13, height: 1.4)),
                     const SizedBox(height: 10),
                     Text('Generated ${_fmtDate(rec.generatedAt)} · advisory only, not a final decision',
-                        style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 11)),
                   ],
                 );
               },

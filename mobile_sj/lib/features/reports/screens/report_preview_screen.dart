@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../model/report_definition.dart';
 import '../provider/reports_provider.dart';
 import '../utils/export_excel.dart';
 import '../utils/export_pdf.dart';
+import '../../../shared/widgets/error_state.dart';
+
+const _kNarrowBreakpoint = 600.0;
 
 const _kPreviewRowLimit = 20;
 
@@ -23,9 +27,10 @@ class _ReportPreviewScreenState extends ConsumerState<ReportPreviewScreen> {
     try {
       await action();
     } catch (e) {
+      debugPrint('Report export failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Export failed: $e'),
+          content: const Text('Export failed. Please try again.'),
           backgroundColor: Colors.red.shade800,
         ));
       }
@@ -51,21 +56,19 @@ class _ReportPreviewScreenState extends ConsumerState<ReportPreviewScreen> {
       ),
       body: dataAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Failed to load report: $e',
-                style: const TextStyle(color: Colors.white54), textAlign: TextAlign.center),
-          ),
+        error: (e, _) => ErrorState(
+          message: 'Failed to load report: $e',
+          onRetry: () => ref.invalidate(reportDataProvider(widget.reportId)),
         ),
         data: (rows) {
           if (rows.isEmpty) {
-            return const Center(
-              child: Text('No data available for this report.', style: TextStyle(color: Colors.white38)),
+            return Center(
+              child: Text('No data available for this report.', style: TextStyle(color: context.colors.textSecondary)),
             );
           }
 
           final preview = rows.take(_kPreviewRowLimit).toList();
+          final isNarrow = MediaQuery.sizeOf(context).width < _kNarrowBreakpoint;
 
           return Column(
             children: [
@@ -74,45 +77,54 @@ class _ReportPreviewScreenState extends ConsumerState<ReportPreviewScreen> {
                 child: Row(
                   children: [
                     Text('${rows.length} ${rows.length == 1 ? 'record' : 'records'}',
-                        style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 14)),
+                        style: TextStyle(color: context.colors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
                     if (rows.length > _kPreviewRowLimit) ...[
                       const SizedBox(width: 8),
-                      const Text('(showing first $_kPreviewRowLimit)',
-                          style: TextStyle(color: Colors.white38, fontSize: 12)),
+                      Text('(showing first $_kPreviewRowLimit)',
+                          style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                     ],
                   ],
                 ),
               ),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  scrollDirection: Axis.horizontal,
-                  child: SingleChildScrollView(
-                    child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(AppTheme.surface),
-                      columns: report.columns
-                          .map((c) => DataColumn(
-                              label: Text(c.label,
-                                  style: const TextStyle(
-                                      color: Colors.white54, fontWeight: FontWeight.w600, fontSize: 12))))
-                          .toList(),
-                      rows: preview
-                          .map((row) => DataRow(
-                                cells: report.columns
-                                    .map((c) => DataCell(Text(c.valueOf(row),
-                                        style: const TextStyle(color: Colors.white70, fontSize: 12))))
-                                    .toList(),
-                              ))
-                          .toList(),
-                    ),
-                  ),
-                ),
+                child: isNarrow
+                    ? ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        itemCount: preview.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, i) => _ReportRowCard(row: preview[i], columns: report.columns),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        scrollDirection: Axis.horizontal,
+                        child: SingleChildScrollView(
+                          child: DataTable(
+                            headingRowColor: WidgetStateProperty.all(context.colors.surface),
+                            columns: report.columns
+                                .map((c) => DataColumn(
+                                    label: Text(c.label,
+                                        style: TextStyle(
+                                            color: context.colors.textTertiary,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12))))
+                                .toList(),
+                            rows: preview
+                                .map((row) => DataRow(
+                                      cells: report.columns
+                                          .map((c) => DataCell(Text(c.valueOf(row),
+                                              style: TextStyle(color: context.colors.textSecondary, fontSize: 12))))
+                                          .toList(),
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                      ),
               ),
               if (_exporting) const LinearProgressIndicator(color: AppTheme.brand),
               DecoratedBox(
-                decoration: const BoxDecoration(
-                  color: AppTheme.surface,
-                  border: Border(top: BorderSide(color: AppTheme.border)),
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  border: Border(top: BorderSide(color: context.colors.border)),
                 ),
                 child: SafeArea(
                   top: false,
@@ -143,6 +155,45 @@ class _ReportPreviewScreenState extends ConsumerState<ReportPreviewScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Card-per-row fallback for phone-width screens, where a wide DataTable
+/// forces cramped double-scrolling. Same columns, stacked as label/value pairs.
+class _ReportRowCard extends StatelessWidget {
+  final dynamic row;
+  final List<ReportColumn> columns;
+  const _ReportRowCard({required this.row, required this.columns});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: columns
+              .map((c) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 120,
+                          child: Text(c.label,
+                              style: TextStyle(
+                                  color: context.colors.textTertiary, fontSize: 11, fontWeight: FontWeight.w600)),
+                        ),
+                        Expanded(
+                          child: Text(c.valueOf(row), style: TextStyle(color: context.colors.textPrimary, fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                  ))
+              .toList(),
+        ),
       ),
     );
   }

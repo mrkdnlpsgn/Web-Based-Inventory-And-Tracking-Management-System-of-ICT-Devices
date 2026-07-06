@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../model/asset_model.dart';
 import '../data/asset_service.dart';
 import '../provider/asset_provider.dart';
@@ -8,6 +9,8 @@ import '../../../shared/data/reference_service.dart';
 import '../../../shared/provider/reference_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_exception.dart';
+import '../../maintenance/data/maintenance_service.dart';
+import '../../disposal/data/disposal_service.dart';
 
 class AssetFormScreen extends ConsumerStatefulWidget {
   final AssetModel? asset; // null = create, non-null = edit
@@ -35,6 +38,10 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   String _lifecycleStatus = 'REGISTERED';
   DateTime? _acquisitionDate;
 
+  // Null when creating a new asset — used to detect a genuine condition
+  // transition (matches the backend's own transition check in AssetService).
+  late final String? _originalCondition;
+
   Timer? _categoryDebounce;
   CategoryModel? _suggestedCategory;
 
@@ -54,6 +61,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     _categoryId = a?.category.id;
     _officeId = a?.office.id;
     _condition = a?.condition ?? 'SERVICEABLE';
+    _originalCondition = a?.condition;
     _lifecycleStatus = a?.lifecycleStatus ?? 'REGISTERED';
     if (a?.acquisitionDate != null) {
       _acquisitionDate = DateTime.tryParse(a!.acquisitionDate);
@@ -116,12 +124,34 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
         'remarks': _remarks.text.trim().isEmpty ? null : _remarks.text.trim(),
       };
       final service = AssetService();
+      final AssetModel saved;
       if (_isEdit) {
-        await service.update(widget.asset!.id, data);
+        saved = await service.update(widget.asset!.id, data);
       } else {
-        await service.create(data);
+        saved = await service.create(data);
       }
       ref.invalidate(assetsPagedProvider(ref.read(assetSearchProvider)));
+
+      // The backend auto-creates a placeholder maintenance/disposal record the
+      // moment an asset's condition transitions into REPAIRABLE/UNSERVICEABLE
+      // (see AssetService.handleConditionLedger). Rather than sending the user
+      // to a blank "Add" form — which would create a second, duplicate record —
+      // fetch that auto-created record and open it directly for completion.
+      final becameRepairable = _condition == 'REPAIRABLE' && _originalCondition != 'REPAIRABLE';
+      final becameUnserviceable = _condition == 'UNSERVICEABLE' && _originalCondition != 'UNSERVICEABLE';
+
+      if (becameRepairable && mounted) {
+        final records = await MaintenanceService().getByAsset(saved.id);
+        if (records.isNotEmpty && mounted) {
+          await context.push('/maintenance/${records.first.id}/edit', extra: records.first);
+        }
+      } else if (becameUnserviceable && mounted) {
+        final records = await DisposalService().getByAsset(saved.id);
+        if (records.isNotEmpty && mounted) {
+          await context.push('/disposal/${records.first.id}/edit', extra: records.first);
+        }
+      }
+
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
       _showError(e.message);
@@ -267,7 +297,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
         initialValue: value,
         isExpanded: true,
         decoration: InputDecoration(labelText: label),
-        dropdownColor: AppTheme.surface,
+        dropdownColor: context.colors.surface,
         items: items.map((e) => DropdownMenuItem(
           value: e,
           child: Text(itemLabel(e), overflow: TextOverflow.ellipsis),
@@ -284,7 +314,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       child: DropdownButtonFormField<String>(
         initialValue: value,
         decoration: InputDecoration(labelText: label),
-        dropdownColor: AppTheme.surface,
+        dropdownColor: context.colors.surface,
         items: options.map((e) => DropdownMenuItem(value: e, child: Text(e.replaceAll('_', ' ')))).toList(),
         onChanged: onChanged,
       ),
@@ -303,7 +333,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             lastDate: DateTime.now(),
             builder: (ctx, child) => Theme(
               data: Theme.of(ctx).copyWith(
-                colorScheme: const ColorScheme.dark(primary: AppTheme.brand, surface: AppTheme.surface),
+                colorScheme: Theme.of(ctx).colorScheme.copyWith(primary: AppTheme.brand),
               ),
               child: child!,
             ),
@@ -316,7 +346,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             _acquisitionDate != null
                 ? _acquisitionDate!.toIso8601String().substring(0, 10)
                 : 'Tap to select',
-            style: TextStyle(color: _acquisitionDate != null ? Colors.white : Colors.white38),
+            style: TextStyle(color: _acquisitionDate != null ? context.colors.textPrimary : context.colors.textSecondary),
           ),
         ),
       ),

@@ -7,11 +7,19 @@ final disposalServiceProvider = Provider<DisposalService>((ref) => DisposalServi
 
 final disposalSearchProvider = StateProvider<String>((ref) => '');
 
+final disposalMethodFilterProvider = StateProvider<String?>((ref) => null);
+final disposalStatusFilterProvider = StateProvider<String?>((ref) => null);
+
 final disposalPagedProvider = StateNotifierProvider.autoDispose
     .family<PaginatedListNotifier<DisposalModel>, PaginatedListState<DisposalModel>, String>((ref, search) {
   final service = ref.watch(disposalServiceProvider);
+  final recommendedMethod = ref.watch(disposalMethodFilterProvider);
+  final disposalStatus = ref.watch(disposalStatusFilterProvider);
   return PaginatedListNotifier<DisposalModel>(
-    (search, page, size) => service.getAll(search: search, page: page, size: size),
+    (search, page, size) => service.getAll(
+      search: search, page: page, size: size,
+      recommendedMethod: recommendedMethod, disposalStatus: disposalStatus,
+    ),
     search.isEmpty ? null : search,
   );
 });

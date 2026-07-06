@@ -6,12 +6,20 @@ import '../model/disposal_model.dart';
 class DisposalService {
   final Dio _dio = ApiClient.instance.dio;
 
-  Future<List<DisposalModel>> getAll({String? search, int page = 0, int size = 20}) async {
+  Future<List<DisposalModel>> getAll({
+    String? search,
+    int page = 0,
+    int size = 20,
+    String? recommendedMethod,
+    String? disposalStatus,
+  }) async {
     try {
       final res = await _dio.get('/disposal', queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         'page': page,
         'size': size,
+        if (recommendedMethod != null && recommendedMethod.isNotEmpty) 'recommendedMethod': recommendedMethod,
+        if (disposalStatus != null && disposalStatus.isNotEmpty) 'disposalStatus': disposalStatus,
       });
       return (res.data as List).map((e) => DisposalModel.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {

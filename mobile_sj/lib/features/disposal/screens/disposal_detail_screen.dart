@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../model/disposal_model.dart';
 import '../provider/disposal_provider.dart';
 import '../provider/disposal_justification_provider.dart';
-import '../screens/disposal_form_screen.dart';
 import '../data/disposal_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/delete_dialog.dart';
+import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/error_state.dart';
 import '../../auth/provider/auth_provider.dart';
 
 class DisposalDetailScreen extends ConsumerWidget {
@@ -26,8 +27,7 @@ class DisposalDetailScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () async {
-                final result = await Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => DisposalFormScreen(disposal: async.value)));
+                final result = await context.push<bool>('/disposal/$disposalId/edit', extra: async.value);
                 if (result == true) ref.invalidate(disposalDetailProvider(disposalId));
               },
             ),
@@ -41,8 +41,10 @@ class DisposalDetailScreen extends ConsumerWidget {
                   ref.invalidate(disposalPagedProvider(ref.read(disposalSearchProvider)));
                   if (context.mounted) context.pop();
                 } catch (e) {
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade800));
+                  }
                 }
               },
             ),
@@ -51,7 +53,10 @@ class DisposalDetailScreen extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-        error: (err, _) => Center(child: Text(err.toString(), style: const TextStyle(color: Colors.white54))),
+        error: (err, _) => ErrorState(
+          message: err.toString(),
+          onRetry: () => ref.invalidate(disposalDetailProvider(disposalId)),
+        ),
         data: (item) => _Body(item: item),
       ),
     );
@@ -61,12 +66,6 @@ class DisposalDetailScreen extends ConsumerWidget {
 class _Body extends StatelessWidget {
   final DisposalModel item;
   const _Body({required this.item});
-
-  Color get _statusColor => switch (item.disposalStatus) {
-        'COMPLETED' => AppTheme.brand,
-        'APPROVED' => AppTheme.statusAssigned,
-        _ => AppTheme.statusMaintenance,
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -81,14 +80,14 @@ class _Body extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _chip(item.recommendedMethod, AppTheme.statusDisposed),
+                    StatusBadge.disposalMethod(item.recommendedMethod),
                     const SizedBox(width: 8),
-                    _chip(item.disposalStatus, _statusColor),
+                    StatusBadge.disposalStatus(item.disposalStatus),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(item.asset.description,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: context.colors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(item.asset.propertyNumber, style: const TextStyle(color: AppTheme.brand, fontSize: 13)),
               ],
@@ -96,17 +95,20 @@ class _Body extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _card('Disposal Info', [
-          _row('Inspection Date', item.inspectionDate),
-          _row('Method', item.recommendedMethod),
-          _row('Status', item.disposalStatus),
-          if (item.approvedBy != null) _row('Approved By', item.approvedBy!),
-          _row('Recorded By', item.recordedBy.fullName),
+        _card(context, 'Disposal Info', [
+          _row(context, 'Inspection Date', item.inspectionDate),
+          _row(context, 'Method', item.recommendedMethod),
+          _row(context, 'Status', item.disposalStatus),
+          if (item.approvedBy != null) _row(context, 'Approved By', item.approvedBy!),
+          if (item.appraisedValue != null) _row(context, 'Appraised Value', '₱${item.appraisedValue!.toStringAsFixed(2)}'),
+          if (item.orNumber != null) _row(context, 'OR No.', item.orNumber!),
+          if (item.amount != null) _row(context, 'Amount', '₱${item.amount!.toStringAsFixed(2)}'),
+          _row(context, 'Recorded By', item.recordedBy.fullName),
         ]),
         const SizedBox(height: 12),
-        _card('Reason for Disposal', [], body: item.reason),
+        _card(context, 'Reason for Disposal', [], body: item.reason),
         const SizedBox(height: 12),
-        _card('Inspection Findings', [], body: item.inspectionFindings),
+        _card(context, 'Inspection Findings', [], body: item.inspectionFindings),
         const SizedBox(height: 12),
         _AiJustificationCard(disposalId: item.id),
         const SizedBox(height: 24),
@@ -114,28 +116,18 @@ class _Body extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
-        child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-      );
-
-  Widget _card(String title, List<Widget> rows, {String? body}) => Card(
+  Widget _card(BuildContext context, String title, List<Widget> rows, {String? body}) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12,
+                  style: TextStyle(color: context.colors.textTertiary, fontSize: 12,
                       fontWeight: FontWeight.w600, letterSpacing: 0.8)),
               const SizedBox(height: 12),
               if (body != null)
-                Text(body, style: const TextStyle(color: Colors.white70, height: 1.5))
+                Text(body, style: TextStyle(color: context.colors.textSecondary, height: 1.5))
               else
                 ...rows,
             ],
@@ -143,13 +135,13 @@ class _Body extends StatelessWidget {
         ),
       );
 
-  Widget _row(String label, String value) => Padding(
+  Widget _row(BuildContext context, String label, String value) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 140, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13))),
-            Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13))),
+            SizedBox(width: 140, child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 13))),
+            Expanded(child: Text(value, style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
           ],
         ),
       );
@@ -207,9 +199,9 @@ class _AiJustificationCardState extends ConsumerState<_AiJustificationCard> {
               children: [
                 const Icon(Icons.auto_awesome_rounded, size: 16, color: AppTheme.brand),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text('AI DISPOSAL JUSTIFICATION',
-                      style: TextStyle(color: Colors.white54, fontSize: 12,
+                      style: TextStyle(color: context.colors.textTertiary, fontSize: 12,
                           fontWeight: FontWeight.w600, letterSpacing: 0.8)),
                 ),
                 if (isAdmin)
@@ -217,7 +209,7 @@ class _AiJustificationCardState extends ConsumerState<_AiJustificationCard> {
                       ? const SizedBox(width: 16, height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brand))
                       : IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white54),
+                          icon: Icon(Icons.refresh_rounded, size: 18, color: context.colors.textTertiary),
                           tooltip: 'Generate justification',
                           onPressed: _generate,
                           visualDensity: VisualDensity.compact,
@@ -232,24 +224,24 @@ class _AiJustificationCardState extends ConsumerState<_AiJustificationCard> {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
               ),
-              error: (e, _) => Text(e.toString(), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              error: (e, _) => Text(e.toString(), style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
               data: (just) {
                 if (just == null) {
                   return Text(
                     isAdmin
                         ? 'No justification drafted yet. Tap refresh to generate one.'
                         : 'No justification drafted yet.',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                   );
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(just.justification,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 13, height: 1.5)),
                     const SizedBox(height: 10),
                     Text('Generated ${_fmtDate(just.generatedAt)} · draft for review, not a final decision',
-                        style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 11)),
                   ],
                 );
               },
