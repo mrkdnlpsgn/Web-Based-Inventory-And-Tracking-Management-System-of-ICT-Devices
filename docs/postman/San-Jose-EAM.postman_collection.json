@@ -1,0 +1,675 @@
+{
+  "info": {
+    "name": "San Jose GSO — Enterprise Asset Management API",
+    "description": "REST API for the Web-Based Inventory and Tracking Management System of ICT Devices (San Jose Municipal Hall). Auth is JWT stored in an HttpOnly cookie set by /api/auth/login — Postman's cookie jar attaches it automatically to subsequent requests in this collection, no manual token handling needed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "assetId", "value": "1", "type": "string" },
+    { "key": "categoryId", "value": "1", "type": "string" },
+    { "key": "officeId", "value": "1", "type": "string" },
+    { "key": "userId", "value": "1", "type": "string" },
+    { "key": "equipmentId", "value": "1", "type": "string" },
+    { "key": "deviceId", "value": "1", "type": "string" },
+    { "key": "maintenanceId", "value": "1", "type": "string" },
+    { "key": "disposalId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] },
+            "description": "Sets the jwt HttpOnly cookie on success. Response body contains the user object."
+          }
+        },
+        {
+          "name": "Login (staff)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"ict_staff\",\n  \"password\": \"ict2024\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] },
+            "description": "Returns 401 if called without a valid jwt cookie — proves JwtAuthFilter is enforcing auth."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] },
+            "description": "Clears the jwt cookie."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assets",
+      "item": [
+        {
+          "name": "Get All Assets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/assets?search=&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api", "assets"],
+              "query": [
+                { "key": "search", "value": "", "description": "optional keyword filter" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Asset by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/assets/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api", "assets", "{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Create Asset",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyNumber\": \"COA-2026-001\",\n  \"description\": \"Dell Latitude 5440 Laptop\",\n  \"categoryId\": 1,\n  \"quantity\": 1,\n  \"acquisitionDate\": \"2026-01-15\",\n  \"unitValue\": 45000.00,\n  \"officeId\": 1,\n  \"accountablePerson\": \"Juan Dela Cruz\",\n  \"physicalCount\": 1,\n  \"location\": \"GSO Office - 2nd Floor\",\n  \"condition\": \"SERVICEABLE\",\n  \"lifecycleStatus\": \"REGISTERED\",\n  \"remarks\": \"Brand new unit\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/assets", "host": ["{{baseUrl}}"], "path": ["api", "assets"] }
+          }
+        },
+        {
+          "name": "Update Asset",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyNumber\": \"COA-2026-001\",\n  \"description\": \"Dell Latitude 5440 Laptop\",\n  \"categoryId\": 1,\n  \"quantity\": 1,\n  \"acquisitionDate\": \"2026-01-15\",\n  \"unitValue\": 45000.00,\n  \"officeId\": 1,\n  \"accountablePerson\": \"Juan Dela Cruz\",\n  \"physicalCount\": 1,\n  \"location\": \"GSO Office - 2nd Floor\",\n  \"condition\": \"SERVICEABLE\",\n  \"lifecycleStatus\": \"ASSIGNED\",\n  \"remarks\": \"Assigned to IT division\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/assets/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api", "assets", "{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Delete Asset",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deleteReason\": \"Duplicate entry created by mistake\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/assets/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api", "assets", "{{assetId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Asset History",
+      "item": [
+        {
+          "name": "Get All History",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/asset-history?search=",
+              "host": ["{{baseUrl}}"], "path": ["api", "asset-history"],
+              "query": [{ "key": "search", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Get History by Asset",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/asset-history/asset/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api", "asset-history", "asset", "{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Create History Entry",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": {{assetId}},\n  \"eventType\": \"TRANSFERRED\",\n  \"fromOfficeId\": 1,\n  \"toOfficeId\": 2,\n  \"performedById\": 1,\n  \"notes\": \"Transferred per memo #2026-045\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/asset-history", "host": ["{{baseUrl}}"], "path": ["api", "asset-history"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Recommendations",
+      "item": [
+        {
+          "name": "Get Latest Recommendation for Asset",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/assets/{{assetId}}/recommendation", "host": ["{{baseUrl}}"], "path": ["api", "assets", "{{assetId}}", "recommendation"] }
+          }
+        },
+        {
+          "name": "Generate Recommendation for Asset",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/assets/{{assetId}}/recommendation", "host": ["{{baseUrl}}"], "path": ["api", "assets", "{{assetId}}", "recommendation"] },
+            "description": "Calls Gemini via AiRecommendationService; requires gemini.api-key and ai.recommendations.enabled to be configured."
+          }
+        },
+        {
+          "name": "Get Recommendations Summary",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/ai-recommendations/summary", "host": ["{{baseUrl}}"], "path": ["api", "ai-recommendations", "summary"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/categories?search=",
+              "host": ["{{baseUrl}}"], "path": ["api", "categories"],
+              "query": [{ "key": "search", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Get Category by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "categories", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "Suggest Category (AI)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"HP LaserJet Pro M404 printer\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/categories/suggest", "host": ["{{baseUrl}}"], "path": ["api", "categories", "suggest"] }
+          }
+        },
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryName\": \"Printers\",\n  \"description\": \"Printing and imaging devices\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/categories", "host": ["{{baseUrl}}"], "path": ["api", "categories"] }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryName\": \"Printers & Scanners\",\n  \"description\": \"Printing, scanning and imaging devices\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "categories", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "categories", "{{categoryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Offices",
+      "item": [
+        {
+          "name": "Get All Offices",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/offices?search=",
+              "host": ["{{baseUrl}}"], "path": ["api", "offices"],
+              "query": [{ "key": "search", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Get Office by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/offices/{{officeId}}", "host": ["{{baseUrl}}"], "path": ["api", "offices", "{{officeId}}"] }
+          }
+        },
+        {
+          "name": "Create Office",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"officeName\": \"General Services Office\",\n  \"headUserId\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/offices", "host": ["{{baseUrl}}"], "path": ["api", "offices"] }
+          }
+        },
+        {
+          "name": "Update Office",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"officeName\": \"General Services Office\",\n  \"headUserId\": 2\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/offices/{{officeId}}", "host": ["{{baseUrl}}"], "path": ["api", "offices", "{{officeId}}"] }
+          }
+        },
+        {
+          "name": "Delete Office",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/offices/{{officeId}}", "host": ["{{baseUrl}}"], "path": ["api", "offices", "{{officeId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?search=",
+              "host": ["{{baseUrl}}"], "path": ["api", "users"],
+              "query": [{ "key": "search", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Get User by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"jdelacruz\",\n  \"fullName\": \"Juan Dela Cruz\",\n  \"role\": \"STAFF\",\n  \"officeId\": 1,\n  \"isActive\": true,\n  \"password\": \"TempPass123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"jdelacruz\",\n  \"fullName\": \"Juan Dela Cruz\",\n  \"role\": \"ADMIN\",\n  \"officeId\": 1,\n  \"isActive\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Change My Password",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"admin123\",\n  \"newPassword\": \"NewStrongPass123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users/me/password", "host": ["{{baseUrl}}"], "path": ["api", "users", "me", "password"] },
+            "description": "Requires the caller's own jwt cookie (uses @AuthenticationPrincipal, not a path id)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Equipment",
+      "item": [
+        {
+          "name": "Get All Equipment",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/equipment?search=&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api", "equipment"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Equipment by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/equipment/{{equipmentId}}", "host": ["{{baseUrl}}"], "path": ["api", "equipment", "{{equipmentId}}"] }
+          }
+        },
+        {
+          "name": "Create Equipment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ICT\",\n  \"equipmentType\": \"Desktop Computer\",\n  \"itemCode\": \"EQ-2026-010\",\n  \"article\": \"Desktop Computer Set\",\n  \"office\": \"GSO\",\n  \"location\": \"GSO Office - 2nd Floor\",\n  \"description\": \"Dell OptiPlex 7020 with monitor\",\n  \"accountablePerson\": \"Maria Santos\",\n  \"accountablePersonPhone\": \"09171234567\",\n  \"accountablePersonEmail\": \"msantos@sanjose.gov.ph\",\n  \"deviceCount\": 0\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/equipment", "host": ["{{baseUrl}}"], "path": ["api", "equipment"] }
+          }
+        },
+        {
+          "name": "Update Equipment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ICT\",\n  \"equipmentType\": \"Desktop Computer\",\n  \"itemCode\": \"EQ-2026-010\",\n  \"article\": \"Desktop Computer Set\",\n  \"office\": \"GSO\",\n  \"location\": \"GSO Office - 3rd Floor\",\n  \"description\": \"Dell OptiPlex 7020 with monitor\",\n  \"accountablePerson\": \"Maria Santos\",\n  \"accountablePersonPhone\": \"09171234567\",\n  \"accountablePersonEmail\": \"msantos@sanjose.gov.ph\",\n  \"deviceCount\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/equipment/{{equipmentId}}", "host": ["{{baseUrl}}"], "path": ["api", "equipment", "{{equipmentId}}"] }
+          }
+        },
+        {
+          "name": "Delete Equipment",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/equipment/{{equipmentId}}", "host": ["{{baseUrl}}"], "path": ["api", "equipment", "{{equipmentId}}"] }
+          }
+        },
+        {
+          "name": "Add Device to Equipment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemCode\": \"DEV-2026-001\",\n  \"serialNumber\": \"SN-ABC123456\",\n  \"model\": \"Dell OptiPlex 7020\",\n  \"amountValue\": 38000.00,\n  \"acquisitionDate\": \"2026-01-15\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/equipment/{{equipmentId}}/devices", "host": ["{{baseUrl}}"], "path": ["api", "equipment", "{{equipmentId}}", "devices"] }
+          }
+        },
+        {
+          "name": "Update Device",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemCode\": \"DEV-2026-001\",\n  \"serialNumber\": \"SN-ABC123456\",\n  \"model\": \"Dell OptiPlex 7020 (upgraded RAM)\",\n  \"amountValue\": 39500.00,\n  \"acquisitionDate\": \"2026-01-15\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/equipment/{{equipmentId}}/devices/{{deviceId}}", "host": ["{{baseUrl}}"], "path": ["api", "equipment", "{{equipmentId}}", "devices", "{{deviceId}}"] }
+          }
+        },
+        {
+          "name": "Delete Device",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/equipment/{{equipmentId}}/devices/{{deviceId}}", "host": ["{{baseUrl}}"], "path": ["api", "equipment", "{{equipmentId}}", "devices", "{{deviceId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "item": [
+        {
+          "name": "Get All Maintenance Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/maintenance?search=&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api", "maintenance"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Maintenance by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/maintenance/{{maintenanceId}}", "host": ["{{baseUrl}}"], "path": ["api", "maintenance", "{{maintenanceId}}"] }
+          }
+        },
+        {
+          "name": "Get Maintenance by Asset",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/maintenance/asset/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api", "maintenance", "asset", "{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Create Maintenance Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": {{assetId}},\n  \"maintenanceType\": \"CORRECTIVE\",\n  \"findings\": \"Laptop battery not holding charge\",\n  \"actionsTaken\": \"Replaced battery unit\",\n  \"assignedTo\": \"ICT Support Team\",\n  \"maintenanceDate\": \"2026-07-01\",\n  \"cost\": 2500.00,\n  \"status\": \"COMPLETED\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/maintenance", "host": ["{{baseUrl}}"], "path": ["api", "maintenance"] }
+          }
+        },
+        {
+          "name": "Update Maintenance Record",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": {{assetId}},\n  \"maintenanceType\": \"CORRECTIVE\",\n  \"findings\": \"Laptop battery not holding charge\",\n  \"actionsTaken\": \"Replaced battery unit; verified charging cycle\",\n  \"assignedTo\": \"ICT Support Team\",\n  \"maintenanceDate\": \"2026-07-01\",\n  \"cost\": 2500.00,\n  \"status\": \"COMPLETED\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/maintenance/{{maintenanceId}}", "host": ["{{baseUrl}}"], "path": ["api", "maintenance", "{{maintenanceId}}"] }
+          }
+        },
+        {
+          "name": "Delete Maintenance Record",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deleteReason\": \"Duplicate log entry\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/maintenance/{{maintenanceId}}", "host": ["{{baseUrl}}"], "path": ["api", "maintenance", "{{maintenanceId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Maintenance AI Summary",
+      "item": [
+        {
+          "name": "Get Latest Summary",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/maintenance/{{maintenanceId}}/summary", "host": ["{{baseUrl}}"], "path": ["api", "maintenance", "{{maintenanceId}}", "summary"] }
+          }
+        },
+        {
+          "name": "Generate Summary",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/maintenance/{{maintenanceId}}/summary", "host": ["{{baseUrl}}"], "path": ["api", "maintenance", "{{maintenanceId}}", "summary"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Disposal",
+      "item": [
+        {
+          "name": "Get All Disposal Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/disposal?search=&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api", "disposal"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Disposal by Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/disposal/{{disposalId}}", "host": ["{{baseUrl}}"], "path": ["api", "disposal", "{{disposalId}}"] }
+          }
+        },
+        {
+          "name": "Get Disposal by Asset",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/disposal/asset/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api", "disposal", "asset", "{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Create Disposal Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": {{assetId}},\n  \"reason\": \"Beyond economical repair\",\n  \"inspectionFindings\": \"Motherboard failure, repair cost exceeds unit value\",\n  \"recommendedMethod\": \"DESTRUCTION\",\n  \"disposalStatus\": \"PENDING\",\n  \"inspectionDate\": \"2026-07-01\",\n  \"approvedBy\": \"GSO Head\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/disposal", "host": ["{{baseUrl}}"], "path": ["api", "disposal"] }
+          }
+        },
+        {
+          "name": "Update Disposal Record",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": {{assetId}},\n  \"reason\": \"Beyond economical repair\",\n  \"inspectionFindings\": \"Motherboard failure, repair cost exceeds unit value\",\n  \"recommendedMethod\": \"DESTRUCTION\",\n  \"disposalStatus\": \"APPROVED\",\n  \"inspectionDate\": \"2026-07-01\",\n  \"approvedBy\": \"GSO Head\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/disposal/{{disposalId}}", "host": ["{{baseUrl}}"], "path": ["api", "disposal", "{{disposalId}}"] }
+          }
+        },
+        {
+          "name": "Delete Disposal Record",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deleteReason\": \"Entered against the wrong asset\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/disposal/{{disposalId}}", "host": ["{{baseUrl}}"], "path": ["api", "disposal", "{{disposalId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Disposal AI Justification",
+      "item": [
+        {
+          "name": "Get Latest Justification",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/disposal/{{disposalId}}/justification", "host": ["{{baseUrl}}"], "path": ["api", "disposal", "{{disposalId}}", "justification"] }
+          }
+        },
+        {
+          "name": "Generate Justification",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/disposal/{{disposalId}}/justification", "host": ["{{baseUrl}}"], "path": ["api", "disposal", "{{disposalId}}", "justification"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "Get All Audit Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?search=",
+              "host": ["{{baseUrl}}"], "path": ["api", "audit-logs"],
+              "query": [{ "key": "search", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Get Latest AI Digest",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/audit-logs/digest", "host": ["{{baseUrl}}"], "path": ["api", "audit-logs", "digest"] }
+          }
+        },
+        {
+          "name": "Generate AI Digest",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/audit-logs/digest", "host": ["{{baseUrl}}"], "path": ["api", "audit-logs", "digest"] }
+          }
+        }
+      ]
+    }
+  ]
+}

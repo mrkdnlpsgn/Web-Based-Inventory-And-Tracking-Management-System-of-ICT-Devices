@@ -26,5 +26,7 @@ Future<void> exportExcel(ReportDefinition report, List<dynamic> rows) async {
   final file = File('${dir.path}/${safeTitle}_$stamp.xlsx');
   await file.writeAsBytes(bytes, flush: true);
 
-  await Share.shareXFiles([XFile(file.path)], subject: report.title);
+  await SharePlus.instance.share(
+    ShareParams(files: [XFile(file.path)], subject: report.title),
+  );
 }

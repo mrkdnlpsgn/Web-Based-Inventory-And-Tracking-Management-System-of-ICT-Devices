@@ -18,7 +18,6 @@ const STATUS_BADGE = {
 }
 const METHOD_BADGE = {
   AUCTION:     'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20',
-  DESTRUCTION: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20',
   DONATION:    'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20',
   TRANSFER:    'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20',
 }
@@ -165,7 +164,6 @@ function Disposal() {
               className="appearance-none text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
               <option value="">All Methods</option>
               <option value="AUCTION">Auction</option>
-              <option value="DESTRUCTION">Destruction</option>
               <option value="DONATION">Donation</option>
               <option value="TRANSFER">Transfer</option>
             </select>

@@ -81,6 +81,22 @@ public class AssetHistoryService {
         return jdbcTemplate.query("CALL sp_asset_history_get_by_asset(?)", HISTORY_MAPPER, assetId);
     }
 
+    /**
+     * Fire-and-forget history entry for other services to call when a REGISTERED, TRANSFERRED,
+     * MAINTENANCE, or DISPOSAL event actually happens — as opposed to {@link #create}, which
+     * serves the manual "Log Asset Event" endpoint and returns the fully-joined record for the API response.
+     */
+    public void logEvent(Long assetId, String eventType, Long fromOfficeId, Long toOfficeId, Long performedById, String notes) {
+        SpHelper.callWithOutLong(jdbcTemplate,
+            "CALL sp_asset_history_create(?, ?, ?, ?, ?, ?, ?)",
+            assetId,
+            eventType,
+            fromOfficeId != null ? fromOfficeId.intValue() : 0,
+            toOfficeId != null ? toOfficeId.intValue() : 0,
+            performedById != null ? performedById.intValue() : 0,
+            notes);
+    }
+
     public AssetHistory create(AssetHistoryRequest req) {
         Long newId = SpHelper.callWithOutLong(jdbcTemplate,
             "CALL sp_asset_history_create(?, ?, ?, ?, ?, ?, ?)",

@@ -230,20 +230,36 @@ List<ReportDefinition> buildReportDefinitions() {
       color: AppTheme.statusDisposed,
       load: () => disposalService.getAll(size: _kAllRowsSize),
       columns: [
-        ReportColumn('Property No.', (row) => (row as DisposalModel).asset.propertyNumber),
-        ReportColumn('Article/Description', (row) => (row as DisposalModel).asset.description),
         ReportColumn('Date Acquired', (row) => fmtDate((row as DisposalModel).asset.acquisitionDate)),
-        ReportColumn('Qty', (row) => (row as DisposalModel).asset.quantity.toString()),
+        ReportColumn('Particulars/Article', (row) => (row as DisposalModel).asset.description),
+        ReportColumn('Property No.', (row) => (row as DisposalModel).asset.propertyNumber),
+        ReportColumn('Qty.', (row) => (row as DisposalModel).asset.quantity.toString()),
         ReportColumn('Unit Cost', (row) => fmtMoney((row as DisposalModel).asset.unitValue)),
         ReportColumn('Total Cost', (row) {
           final d = row as DisposalModel;
           return fmtMoney(d.asset.unitValue * d.asset.quantity);
         }),
-        ReportColumn('Condition', (row) => (row as DisposalModel).asset.condition),
-        ReportColumn('Inspection Findings', (row) => (row as DisposalModel).inspectionFindings),
-        ReportColumn('Recommended Action', (row) => (row as DisposalModel).recommendedMethod),
-        ReportColumn('Inspection Date', (row) => fmtDate((row as DisposalModel).inspectionDate)),
-        ReportColumn('Status', (row) => (row as DisposalModel).disposalStatus),
+        ReportColumn('Accumulated Depreciation', (row) => '—'),
+        ReportColumn('Accumulated Impairment Losses', (row) => '—'),
+        ReportColumn('Carrying Amount', (row) => '—'),
+        ReportColumn('Remarks', (row) => (row as DisposalModel).inspectionFindings),
+        ReportColumn('Sale', (row) {
+          final d = row as DisposalModel;
+          return d.recommendedMethod == 'AUCTION' ? d.asset.quantity.toString() : '—';
+        }),
+        ReportColumn('Transfer', (row) {
+          final d = row as DisposalModel;
+          return d.recommendedMethod == 'TRANSFER' ? d.asset.quantity.toString() : '—';
+        }),
+        ReportColumn('Destruction', (row) => '—'),
+        ReportColumn('Others (Specify)', (row) {
+          final d = row as DisposalModel;
+          return d.recommendedMethod == 'DONATION' ? 'Donation' : '—';
+        }),
+        ReportColumn('Total', (row) => (row as DisposalModel).asset.quantity.toString()),
+        ReportColumn('Appraised Value', (row) => fmtMoney((row as DisposalModel).appraisedValue)),
+        ReportColumn('OR No.', (row) => (row as DisposalModel).orNumber ?? '—'),
+        ReportColumn('Amount', (row) => fmtMoney((row as DisposalModel).amount)),
       ],
       certification: const [
         'Inspected by: GSO Inspector',

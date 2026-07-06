@@ -110,10 +110,10 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Text('Camera Scanner',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
           ),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -123,7 +123,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               child: _scanning
                   ? MobileScanner(
                       controller: _controller,
-                      errorBuilder: (context, error, child) => Container(
+                      errorBuilder: (context, error) => Container(
                         color: Colors.black,
                         alignment: Alignment.center,
                         padding: const EdgeInsets.all(24),
@@ -142,9 +142,9 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                       },
                     )
                   : Container(
-                      color: AppTheme.bg,
+                      color: context.colors.bg,
                       alignment: Alignment.center,
-                      child: const Icon(Icons.qr_code_scanner_rounded, size: 56, color: Colors.white24),
+                      child: Icon(Icons.qr_code_scanner_rounded, size: 56, color: context.colors.textTertiary),
                     ),
             ),
           ),
@@ -173,11 +173,11 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Manual Code Entry',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+            Text('Manual Code Entry',
+                style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
             const SizedBox(height: 4),
-            const Text('Enter a Property Number to search directly.',
-                style: TextStyle(color: Colors.white54, fontSize: 12.5)),
+            Text('Enter a Property Number to search directly.',
+                style: TextStyle(color: context.colors.textTertiary, fontSize: 12.5)),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -213,9 +213,9 @@ class _InfoCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            const Icon(Icons.info_outline_rounded, color: Colors.white38, size: 20),
+            Icon(Icons.info_outline_rounded, color: context.colors.textSecondary, size: 20),
             const SizedBox(width: 12),
-            Expanded(child: Text(text, style: const TextStyle(color: Colors.white54, fontSize: 13))),
+            Expanded(child: Text(text, style: TextStyle(color: context.colors.textTertiary, fontSize: 13))),
           ],
         ),
       ),
@@ -239,8 +239,8 @@ class _NotFoundCard extends StatelessWidget {
             const Text('Asset Not Found',
                 style: TextStyle(color: AppTheme.statusDisposed, fontWeight: FontWeight.w600, fontSize: 14)),
             const SizedBox(height: 4),
-            const Text('No asset matches this code. Verify the property number and try again.',
-                textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 12.5)),
+            Text('No asset matches this code. Verify the property number and try again.',
+                textAlign: TextAlign.center, style: TextStyle(color: context.colors.textTertiary, fontSize: 12.5)),
             const SizedBox(height: 14),
             OutlinedButton(onPressed: onClear, child: const Text('Clear')),
           ],
@@ -283,9 +283,9 @@ class _ResultCard extends StatelessWidget {
                   decoration: const BoxDecoration(color: AppTheme.brand, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text('Asset Found',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                      style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
                 ),
                 TextButton(
                   onPressed: () => context.push('/assets/${asset.id}'),
@@ -311,10 +311,10 @@ class _ResultCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(e.key.toUpperCase(),
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 10.5, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                        style: TextStyle(
+                            color: context.colors.textSecondary, fontSize: 10.5, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
                     const SizedBox(height: 2),
-                    Text(e.value!, style: const TextStyle(color: Colors.white70, fontSize: 13.5)),
+                    Text(e.value!, style: TextStyle(color: context.colors.textSecondary, fontSize: 13.5)),
                   ],
                 ),
               ),

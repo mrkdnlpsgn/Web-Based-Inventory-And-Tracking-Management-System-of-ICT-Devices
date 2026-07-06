@@ -28,23 +28,23 @@ class _DeleteDialogState extends State<_DeleteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surface,
-      title: const Text('Confirm Delete', style: TextStyle(color: Colors.white)),
+      backgroundColor: context.colors.surface,
+      title: Text('Confirm Delete', style: TextStyle(color: context.colors.textPrimary)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('This action cannot be undone.',
-              style: TextStyle(color: Colors.white54, fontSize: 13)),
+          Text('This action cannot be undone.',
+              style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
           if (widget.requireReason) ...[
             const SizedBox(height: 16),
             TextField(
               controller: _ctrl,
               maxLines: 2,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Reason for deletion',
                 hintText: 'Required',
-                hintStyle: TextStyle(color: Colors.white24),
+                hintStyle: TextStyle(color: context.colors.textTertiary),
               ),
             ),
           ],
@@ -53,7 +53,7 @@ class _DeleteDialogState extends State<_DeleteDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          child: Text('Cancel', style: TextStyle(color: context.colors.textTertiary)),
         ),
         TextButton(
           onPressed: () {

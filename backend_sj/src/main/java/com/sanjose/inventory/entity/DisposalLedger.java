@@ -3,6 +3,7 @@ package com.sanjose.inventory.entity;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
 @Builder
 public class DisposalLedger {
 
-    public enum DisposalMethod { AUCTION, DESTRUCTION, DONATION, TRANSFER }
+    public enum DisposalMethod { AUCTION, DONATION, TRANSFER }
     public enum DisposalStatus { PENDING, APPROVED, COMPLETED }
 
     @Id
@@ -47,6 +48,15 @@ public class DisposalLedger {
 
     @Column(name = "approved_by", length = 150)
     private String approvedBy;
+
+    @Column(name = "appraised_value", precision = 12, scale = 2)
+    private BigDecimal appraisedValue;
+
+    @Column(name = "or_number", length = 50)
+    private String orNumber;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal amount;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recorded_by", nullable = false)

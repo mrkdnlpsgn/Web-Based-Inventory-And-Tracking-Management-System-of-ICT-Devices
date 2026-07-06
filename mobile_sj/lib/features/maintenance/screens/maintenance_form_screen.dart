@@ -43,13 +43,15 @@ class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
     _cost = TextEditingController(text: m?.cost?.toStringAsFixed(2) ?? '');
     _maintenanceType = m?.maintenanceType ?? 'PREVENTIVE';
     _status = m?.status ?? 'SCHEDULED';
-    _selectedAsset = widget.preselectedAsset;
+    _selectedAsset = m?.asset ?? widget.preselectedAsset;
     if (m?.maintenanceDate != null) _maintenanceDate = DateTime.tryParse(m!.maintenanceDate);
   }
 
   @override
   void dispose() {
-    for (final c in [_findings, _actionsTaken, _assignedTo, _cost]) c.dispose();
+    for (final c in [_findings, _actionsTaken, _assignedTo, _cost]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -131,18 +133,26 @@ class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
 
   Widget _assetSelector() {
     return InkWell(
-      onTap: () async {
-        final picked = await showAssetPicker(context, ref);
-        if (picked != null) setState(() => _selectedAsset = picked);
-      },
+      onTap: _isEdit
+          ? null
+          : () async {
+              final picked = await showAssetPicker(context, ref);
+              if (picked != null) setState(() => _selectedAsset = picked);
+            },
       child: InputDecorator(
-        decoration: const InputDecoration(labelText: 'Asset'),
+        decoration: InputDecoration(
+          labelText: 'Asset',
+          helperText: _isEdit ? 'Asset cannot be changed after creation' : null,
+          suffixIcon: _isEdit
+              ? Icon(Icons.lock_outline_rounded, size: 18, color: context.colors.textTertiary)
+              : null,
+        ),
         child: _selectedAsset != null
             ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_selectedAsset!.description, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                Text(_selectedAsset!.description, style: TextStyle(color: context.colors.textPrimary, fontSize: 14)),
                 Text(_selectedAsset!.propertyNumber, style: const TextStyle(color: AppTheme.brand, fontSize: 12)),
               ])
-            : const Text('Tap to select asset', style: TextStyle(color: Colors.white38)),
+            : Text('Tap to select asset', style: TextStyle(color: context.colors.textSecondary)),
       ),
     );
   }
@@ -167,7 +177,7 @@ class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
       child: DropdownButtonFormField<String>(
         initialValue: value,
         decoration: InputDecoration(labelText: label),
-        dropdownColor: AppTheme.surface,
+        dropdownColor: context.colors.surface,
         items: options.map((e) => DropdownMenuItem(value: e, child: Text(e.replaceAll('_', ' ')))).toList(),
         onChanged: onChanged,
       ),
@@ -186,7 +196,7 @@ class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
             lastDate: DateTime.now().add(const Duration(days: 365)),
             builder: (ctx, child) => Theme(
               data: Theme.of(ctx).copyWith(
-                colorScheme: const ColorScheme.dark(primary: AppTheme.brand, surface: AppTheme.surface),
+                colorScheme: Theme.of(ctx).colorScheme.copyWith(primary: AppTheme.brand),
               ),
               child: child!,
             ),
@@ -197,7 +207,7 @@ class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
           decoration: const InputDecoration(labelText: 'Maintenance Date'),
           child: Text(
             _maintenanceDate != null ? _maintenanceDate!.toIso8601String().substring(0, 10) : 'Tap to select',
-            style: TextStyle(color: _maintenanceDate != null ? Colors.white : Colors.white38),
+            style: TextStyle(color: _maintenanceDate != null ? context.colors.textPrimary : context.colors.textSecondary),
           ),
         ),
       ),

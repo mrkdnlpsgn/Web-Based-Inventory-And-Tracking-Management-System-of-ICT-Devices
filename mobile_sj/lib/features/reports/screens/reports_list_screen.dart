@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_theme.dart';
 import '../model/report_definition.dart';
 import '../provider/reports_provider.dart';
 
@@ -55,14 +56,14 @@ class _ReportCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(report.title,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                        style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
                     const SizedBox(height: 2),
-                    Text(report.subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12.5), maxLines: 2,
+                    Text(report.subtitle, style: TextStyle(color: context.colors.textTertiary, fontSize: 12.5), maxLines: 2,
                         overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+              Icon(Icons.chevron_right_rounded, color: context.colors.textSecondary),
             ],
           ),
         ),

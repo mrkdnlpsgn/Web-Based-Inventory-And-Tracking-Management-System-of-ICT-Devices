@@ -223,7 +223,6 @@ CREATE TABLE disposal_ledger (
     inspection_findings     TEXT    NOT NULL,
     recommended_method      ENUM(
                                 'AUCTION',
-                                'DESTRUCTION',
                                 'DONATION',
                                 'TRANSFER'
                             )       NOT NULL,
@@ -234,6 +233,9 @@ CREATE TABLE disposal_ledger (
                             )       NOT NULL DEFAULT 'PENDING',
     inspection_date         DATE    NOT NULL,
     approved_by             VARCHAR(150) NULL COMMENT 'Name of approving authority',
+    appraised_value         DECIMAL(12,2) NULL COMMENT 'Value assigned by the appraisal/inspection committee',
+    or_number               VARCHAR(50) NULL COMMENT 'Official Receipt number, set once the item is actually sold',
+    amount                  DECIMAL(12,2) NULL COMMENT 'Actual sale amount, set once the item is actually sold',
     recorded_by             INT     NOT NULL,
     is_deleted              BOOLEAN NOT NULL DEFAULT FALSE
                             COMMENT 'Soft delete flag',
@@ -438,7 +440,6 @@ CREATE TABLE deleted_disposal (
     inspection_findings     TEXT    NOT NULL,
     recommended_method      ENUM(
                                 'AUCTION',
-                                'DESTRUCTION',
                                 'DONATION',
                                 'TRANSFER'
                             )       NOT NULL,
@@ -450,6 +451,9 @@ CREATE TABLE deleted_disposal (
     inspection_date         DATE    NOT NULL,
     approved_by_user_id     INT     NULL,
     approved_by_name        VARCHAR(100)    NULL COMMENT 'Snapshot of approver name',
+    appraised_value         DECIMAL(12,2) NULL,
+    or_number               VARCHAR(50) NULL,
+    amount                  DECIMAL(12,2) NULL,
     recorded_by_user_id     INT     NOT NULL,
     recorded_by_name        VARCHAR(100)    NOT NULL COMMENT 'Snapshot of recorder name',
 

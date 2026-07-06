@@ -59,32 +59,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: AppTheme.brand.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.location_city_rounded,
-                        size: 40,
-                        color: AppTheme.brand,
+                    Center(
+                      child: Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.brand.withValues(alpha: 0.3),
+                            width: 3,
+                          ),
+                        ),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/images/images.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
                     Text(
                       'San Jose GSO',
+                      textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: context.colors.textPrimary,
                           ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Enterprise Asset Management',
+                      textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white54,
+                            color: context.colors.textSecondary,
                           ),
                     ),
                     const SizedBox(height: 40),
@@ -113,6 +121,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined,
                           ),
+                          tooltip: _obscure ? 'Show password' : 'Hide password',
                           onPressed: () =>
                               setState(() => _obscure = !_obscure),
                         ),
@@ -124,27 +133,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           v == null || v.isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 28),
-                    SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : _submit,
-                        child: isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Sign In'),
-                      ),
+                    ElevatedButton(
+                      onPressed: isLoading ? null : _submit,
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Sign In'),
                     ),
                     const SizedBox(height: 24),
                     Text(
                       'For access issues, contact the ICT Administrator.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.white38,
+                            color: context.colors.textSecondary,
                           ),
                       textAlign: TextAlign.center,
                     ),

@@ -10,7 +10,7 @@ function Button({ children, variant = 'primary', size = 'md', className = '', ..
 
   const variants = {
     primary:
-      'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700 focus:ring-brand-500 shadow-sm hover:shadow-brand-500/20 hover:shadow-md',
+      'bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 focus:ring-brand-500 shadow-sm hover:shadow-brand-800/20 hover:shadow-md',
     secondary:
       'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 focus:ring-slate-400 dark:focus:ring-zinc-600',
     danger:

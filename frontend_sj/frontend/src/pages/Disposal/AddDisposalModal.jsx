@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 
-const METHODS   = ['AUCTION', 'DESTRUCTION', 'DONATION', 'TRANSFER']
+const METHODS   = ['AUCTION', 'DONATION', 'TRANSFER']
 const STATUSES  = ['PENDING', 'APPROVED', 'COMPLETED']
 const INPUT_CLASS = 'w-full rounded-md border border-slate-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150'
 
@@ -13,10 +13,13 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
     assetId:            initial?.asset?.id           ? String(initial.asset.id) : '',
     reason:             initial?.reason              || '',
     inspectionFindings: initial?.inspectionFindings  || '',
-    recommendedMethod:  initial?.recommendedMethod   || 'DESTRUCTION',
+    recommendedMethod:  initial?.recommendedMethod   || 'AUCTION',
     disposalStatus:     initial?.disposalStatus      || 'PENDING',
     inspectionDate:     initial?.inspectionDate      || '',
     approvedBy:         initial?.approvedBy           || '',
+    appraisedValue:     initial?.appraisedValue != null ? String(initial.appraisedValue) : '',
+    orNumber:           initial?.orNumber             || '',
+    amount:             initial?.amount != null      ? String(initial.amount) : '',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -45,6 +48,9 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
         disposalStatus:     form.disposalStatus,
         inspectionDate:     form.inspectionDate,
         approvedBy:         form.approvedBy.trim() || null,
+        appraisedValue:     form.appraisedValue !== '' ? Number(form.appraisedValue) : null,
+        orNumber:           form.orNumber.trim() || null,
+        amount:             form.amount !== ''         ? Number(form.amount) : null,
       }
       await onSave(payload)
       onClose()
@@ -118,6 +124,24 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
             <input className={INPUT_CLASS} placeholder="Full name of approving authority" value={form.approvedBy} onChange={set('approvedBy')} />
           </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Appraised Value <span className="text-slate-400 font-normal">(optional)</span></label>
+            <input type="number" step="0.01" min="0" className={INPUT_CLASS} placeholder="0.00" value={form.appraisedValue} onChange={set('appraisedValue')} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">OR No. <span className="text-slate-400 font-normal">(optional)</span></label>
+            <input className={INPUT_CLASS} placeholder="Official Receipt number" value={form.orNumber} onChange={set('orNumber')} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Amount <span className="text-slate-400 font-normal">(optional)</span></label>
+            <input type="number" step="0.01" min="0" className={INPUT_CLASS} placeholder="0.00" value={form.amount} onChange={set('amount')} />
+          </div>
+        </div>
+        <p className="text-xs text-slate-400 dark:text-zinc-500 -mt-2">
+          OR No. and Amount are typically filled in once the item has actually been sold.
+        </p>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-zinc-800">
           <Button type="button" variant="secondary" size="md" onClick={onClose}>Cancel</Button>
