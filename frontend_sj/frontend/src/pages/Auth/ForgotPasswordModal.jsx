@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import Modal from '../../components/common/Modal'
-import { forgotPassword, verifyOtp, resetPassword } from '../../services/authService'
+import { forgotPassword } from '../../services/authService'
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800/60 ' +
@@ -15,9 +15,13 @@ const BTN_PRIMARY =
   'focus:ring-offset-white dark:focus:ring-offset-zinc-900 disabled:opacity-40 ' +
   'disabled:cursor-not-allowed disabled:active:scale-100'
 
-const BTN_GHOST =
-  'text-xs text-brand-500 hover:text-brand-600 dark:hover:text-brand-400 ' +
-  'transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed'
+const REQUIREMENTS = [
+  { key: 'length',    label: '8–128 characters',                    test: (p) => p.length >= 8 && p.length <= 128 },
+  { key: 'uppercase', label: 'One uppercase letter (A–Z)',           test: (p) => /[A-Z]/.test(p) },
+  { key: 'lowercase', label: 'One lowercase letter (a–z)',           test: (p) => /[a-z]/.test(p) },
+  { key: 'digit',     label: 'One number (0–9)',                    test: (p) => /[0-9]/.test(p) },
+  { key: 'special',   label: 'One special character (@$!%*?&_#^-)', test: (p) => /[@$!%*?&_#^-]/.test(p) },
+]
 
 function ErrorBox({ message }) {
   if (!message) return null
@@ -32,177 +36,63 @@ function ErrorBox({ message }) {
 }
 
 function ForgotPasswordModal({ onClose, initialIdentifier = '' }) {
-  const [step, setStep]             = useState(initialIdentifier.trim() ? 'otp' : 'identifier')
-  const [identifier, setIdentifier] = useState(initialIdentifier.trim())
-  const [otp, setOtp]               = useState('')
-  const [resetToken, setResetToken] = useState('')
+  const [done, setDone]                       = useState(false)
+  const [username, setUsername]               = useState(initialIdentifier.trim())
   const [newPassword, setNewPassword]         = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword]       = useState(false)
-  const [loading, setLoading]       = useState(false)
-  const [cooldown, setCooldown]     = useState(0)
-  const [error, setError]           = useState('')
-  const hasSent                     = useRef(false)
+  const [loading, setLoading]                 = useState(false)
+  const [error, setError]                     = useState('')
 
-  useEffect(() => {
-    if (cooldown <= 0) return
-    const timer = setTimeout(() => setCooldown((c) => c - 1), 1000)
-    return () => clearTimeout(timer)
-  }, [cooldown])
+  const complexityMet = REQUIREMENTS.every((r) => r.test(newPassword))
 
-  const startCooldown = () => setCooldown(60)
-
-  // Auto-send OTP when identifier is pre-filled (user came from login form)
-  useEffect(() => {
-    if (!initialIdentifier.trim() || hasSent.current) return
-    hasSent.current = true
-    setLoading(true)
-    forgotPassword(initialIdentifier.trim())
-      .then(() => { startCooldown() })
-      .catch(() => setError('Failed to send OTP. Please try again.'))
-      .finally(() => setLoading(false))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleSendOtp = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!identifier.trim()) { setError('Please enter your email or username.'); return }
     setError('')
-    setLoading(true)
-    try {
-      await forgotPassword(identifier.trim())
-      setStep('otp')
-      startCooldown()
-    } catch {
-      setError('Failed to send OTP. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault()
-    if (otp.length !== 6) { setError('Please enter the 6-digit OTP code.'); return }
-    setError('')
-    setLoading(true)
-    try {
-      const res = await verifyOtp(identifier.trim(), otp.trim())
-      setResetToken(res.data.resetToken)
-      setStep('password')
-    } catch (err) {
-      setError(err.response?.data?.message || 'Invalid or expired OTP.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleResendOtp = async () => {
-    setError('')
-    setOtp('')
-    setLoading(true)
-    try {
-      await forgotPassword(identifier.trim())
-      startCooldown()
-    } catch {
-      setError('Failed to resend OTP. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault()
-    if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (!username.trim()) { setError('Please enter your username.'); return }
+    if (!complexityMet) { setError('New password does not meet the requirements below.'); return }
     if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return }
-    setError('')
     setLoading(true)
     try {
-      await resetPassword(resetToken, newPassword)
-      setStep('done')
+      await forgotPassword(username.trim(), newPassword)
+      setDone(true)
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reset password. Please start over.')
+      setError(err.response?.data?.message || 'Failed to reset password. Please try again.')
     } finally {
       setLoading(false)
     }
-  }
-
-  const subtitles = {
-    identifier: 'Enter your email or username to receive a one-time code.',
-    otp:        loading ? 'Sending OTP to your registered email…' : 'A 6-digit code was sent to your registered email address.',
-    password:   'OTP verified. Choose your new password.',
-    done:       null,
   }
 
   return (
     <Modal
       title="Reset Password"
-      subtitle={subtitles[step]}
+      subtitle={done ? null : 'Enter your username and choose a new password.'}
       onClose={onClose}
       size="md"
     >
       <div className="space-y-4">
         <ErrorBox message={error} />
 
-        {step === 'identifier' && (
-          <form onSubmit={handleSendOtp} noValidate className="space-y-4">
+        {!done ? (
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">
-                Email or Username
-              </label>
+              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Username</label>
               <input
                 type="text"
                 autoFocus
-                placeholder="you@sjmh.gov.ph or your username"
-                value={identifier}
-                onChange={(e) => { setIdentifier(e.target.value); setError('') }}
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setError('') }}
                 className={INPUT_CLASS}
               />
             </div>
-            <button type="submit" disabled={loading} className={BTN_PRIMARY}>
-              {loading ? 'Sending…' : 'Send OTP'}
-            </button>
-          </form>
-        )}
 
-        {step === 'otp' && (
-          <form onSubmit={handleVerifyOtp} noValidate className="space-y-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">
-                One-Time Password
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoFocus
-                placeholder="123456"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => { setOtp(e.target.value.replace(/\D/g, '')); setError('') }}
-                className={INPUT_CLASS + ' tracking-[0.5em] font-mono text-center text-lg'}
-              />
-              <p className="text-xs text-slate-400 dark:text-zinc-500">
-                Didn't receive it?{' '}
-                <button type="button" onClick={handleResendOtp} disabled={loading || cooldown > 0} className={BTN_GHOST}>
-                  {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend OTP'}
-                </button>
-              </p>
-            </div>
-            <button type="submit" disabled={loading || otp.length !== 6} className={BTN_PRIMARY}>
-              {loading ? 'Verifying…' : 'Verify Code'}
-            </button>
-          </form>
-        )}
-
-        {step === 'password' && (
-          <form onSubmit={handleResetPassword} noValidate className="space-y-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">
-                New Password
-              </label>
+              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">New Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  autoFocus
-                  placeholder="At least 8 characters"
+                  placeholder="Enter new password"
                   value={newPassword}
                   onChange={(e) => { setNewPassword(e.target.value); setError('') }}
                   className={INPUT_CLASS + ' pr-10'}
@@ -226,11 +116,26 @@ function ForgotPasswordModal({ onClose, initialIdentifier = '' }) {
                   )}
                 </button>
               </div>
+              {newPassword && (
+                <ul className="mt-1 space-y-0.5">
+                  {REQUIREMENTS.map(({ key, label, test }) => {
+                    const met = test(newPassword)
+                    return (
+                      <li key={key} className={`flex items-center gap-1.5 text-xs transition-colors ${met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-zinc-500'}`}>
+                        {met
+                          ? <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                          : <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                        }
+                        {label}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </div>
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">
-                Confirm Password
-              </label>
+              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Confirm New Password</label>
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Re-enter new password"
@@ -239,13 +144,16 @@ function ForgotPasswordModal({ onClose, initialIdentifier = '' }) {
                 className={INPUT_CLASS}
               />
             </div>
+
             <button type="submit" disabled={loading} className={BTN_PRIMARY}>
               {loading ? 'Resetting…' : 'Reset Password'}
             </button>
-          </form>
-        )}
 
-        {step === 'done' && (
+            <p className="text-xs text-slate-400 dark:text-zinc-500 text-center">
+              You can only reset a password once every 15 minutes per account.
+            </p>
+          </form>
+        ) : (
           <div className="py-4 text-center space-y-4">
             <div className="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30 mx-auto">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
@@ -253,8 +161,8 @@ function ForgotPasswordModal({ onClose, initialIdentifier = '' }) {
               </svg>
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">Password Reset Successfully</p>
-              <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">You can now sign in with your new password.</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Password Reset</p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">If that username exists, its password has been updated. You can now sign in with your new password.</p>
             </div>
             <button onClick={onClose} className={BTN_PRIMARY}>
               Back to Sign In

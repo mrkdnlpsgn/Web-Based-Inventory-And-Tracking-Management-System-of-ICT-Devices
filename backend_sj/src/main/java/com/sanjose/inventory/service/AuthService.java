@@ -27,6 +27,9 @@ public class AuthService {
     @Value("${auth.lockout-minutes:15}")
     private int lockoutMinutes;
 
+    @Value("${auth.forgot-password-cooldown-minutes:15}")
+    private int forgotPasswordCooldownMinutes;
+
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -34,6 +37,10 @@ public class AuthService {
     private record LoginUserData(
         Long id, String username, String password, String fullName, String role,
         Boolean isActive, Integer failedLoginAttempts, LocalDateTime accountLockedUntil
+    ) {}
+
+    private record ForgotPasswordUserData(
+        Long id, String username, Boolean isActive, LocalDateTime lastPasswordResetAt
     ) {}
 
     @Transactional
@@ -86,5 +93,38 @@ public class AuthService {
                 "role",     user.role()
             )
         );
+    }
+
+    @Transactional
+    public void forgotPassword(String username, String newPassword) {
+        List<ForgotPasswordUserData> rows = jdbcTemplate.query(
+            "CALL sp_auth_get_user_for_forgot_password(?)",
+            (rs, rn) -> {
+                Timestamp lastResetTs = rs.getTimestamp("lastPasswordResetAt");
+                return new ForgotPasswordUserData(
+                    rs.getLong("id"),
+                    rs.getString("username"),
+                    rs.getObject("isActive", Boolean.class),
+                    lastResetTs != null ? lastResetTs.toLocalDateTime() : null
+                );
+            },
+            username);
+
+        // Unknown username: no-op rather than reveal whether the account exists.
+        if (rows.isEmpty()) return;
+        ForgotPasswordUserData user = rows.get(0);
+        if (!Boolean.TRUE.equals(user.isActive())) return;
+
+        if (user.lastPasswordResetAt() != null) {
+            LocalDateTime nextAllowed = user.lastPasswordResetAt().plusMinutes(forgotPasswordCooldownMinutes);
+            if (LocalDateTime.now().isBefore(nextAllowed)) {
+                long minutesLeft = java.time.Duration.between(LocalDateTime.now(), nextAllowed).toMinutes() + 1;
+                throw new IllegalStateException(
+                    "A password was already reset recently. Please try again in " + minutesLeft + " minute(s).");
+            }
+        }
+
+        jdbcTemplate.update("CALL sp_auth_forgot_password_reset(?, ?)",
+            user.id(), passwordEncoder.encode(newPassword));
     }
 }

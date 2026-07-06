@@ -40,6 +40,7 @@ CREATE TABLE users (
     is_active               BOOLEAN         NOT NULL DEFAULT TRUE,
     failed_login_attempts   INT             NOT NULL DEFAULT 0,
     account_locked_until    DATETIME        NULL,
+    last_password_reset_at  DATETIME        NULL,
     created_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_users         PRIMARY KEY (user_id),
