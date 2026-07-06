@@ -87,6 +87,15 @@ public class UserService {
         auditLogService.log("USER_DELETED", "Users", id, "user", "Deleted: " + user.getUsername());
     }
 
+    public void resetPassword(Long id, String newPassword) {
+        UserResponse user = findById(id);
+        jdbcTemplate.update("CALL sp_users_change_password(?, ?)",
+            id, passwordEncoder.encode(newPassword));
+        jdbcTemplate.update("CALL sp_auth_login_success(?)", id);
+        auditLogService.log("USER_PASSWORD_RESET", "Users", id, "user",
+            "Password reset by administrator: " + user.getUsername());
+    }
+
     public void changePassword(String username, String currentPassword, String newPassword) {
         List<Object[]> rows = jdbcTemplate.query(
             "CALL sp_users_get_by_username(?)",

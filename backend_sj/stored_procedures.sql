@@ -40,6 +40,25 @@ BEGIN
     WHERE user_id = p_user_id;
 END $$
 
+DROP PROCEDURE IF EXISTS sp_auth_get_user_for_forgot_password $$
+CREATE PROCEDURE sp_auth_get_user_for_forgot_password(IN p_username VARCHAR(50))
+BEGIN
+    SELECT user_id AS id, username, is_active AS isActive, last_password_reset_at AS lastPasswordResetAt
+    FROM users
+    WHERE LOWER(username) = LOWER(p_username);
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_forgot_password_reset $$
+CREATE PROCEDURE sp_auth_forgot_password_reset(IN p_user_id INT, IN p_password_hash VARCHAR(255))
+BEGIN
+    UPDATE users
+    SET password_hash = p_password_hash,
+        last_password_reset_at = NOW(),
+        failed_login_attempts = 0,
+        account_locked_until = NULL
+    WHERE user_id = p_user_id;
+END $$
+
 -- =============================================================
 -- OFFICES
 -- =============================================================

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../context/ThemeContext'
 import Input from '../../components/common/Input'
+import ForgotPasswordModal from './ForgotPasswordModal'
 
 const FEATURES = [
   {
@@ -39,6 +40,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError]             = useState('')
   const [loading, setLoading]         = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -172,9 +174,20 @@ function Login() {
 
             {/* Password */}
             <div className="mb-6">
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="text-sm font-medium text-slate-700 dark:text-zinc-300">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors duration-150"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <Input
                 id="password"
-                label="Password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 placeholder="••••••••"
@@ -226,6 +239,13 @@ function Login() {
           </p>
         </div>
       </div>
+
+      {showForgotPassword && (
+        <ForgotPasswordModal
+          initialIdentifier={form.identifier}
+          onClose={() => setShowForgotPassword(false)}
+        />
+      )}
     </div>
   )
 }

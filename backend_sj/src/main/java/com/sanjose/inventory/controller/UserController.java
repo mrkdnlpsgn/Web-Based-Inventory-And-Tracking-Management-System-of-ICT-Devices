@@ -1,9 +1,11 @@
 package com.sanjose.inventory.controller;
 
 import com.sanjose.inventory.dto.ChangePasswordRequest;
+import com.sanjose.inventory.dto.ResetPasswordRequest;
 import com.sanjose.inventory.dto.UserRequest;
 import com.sanjose.inventory.dto.UserResponse;
 import com.sanjose.inventory.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -37,6 +39,12 @@ public class UserController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         userService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/reset-password")
+    public ResponseEntity<Void> resetPassword(@PathVariable Long id, @Valid @RequestBody ResetPasswordRequest req) {
+        userService.resetPassword(id, req.newPassword());
+        return ResponseEntity.ok().build();
     }
 
     @PutMapping("/me/password")

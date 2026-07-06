@@ -9,7 +9,8 @@ import Button from '../../components/common/Button'
 import Badge from '../../components/common/Badge'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import UserModal from './UserModal'
-import { getUsers, createUser, updateUser, deleteUser, changePassword } from '../../services/userService'
+import ResetPasswordModal from './ResetPasswordModal'
+import { getUsers, createUser, updateUser, deleteUser, changePassword, resetPassword } from '../../services/userService'
 import { getAuditLogs } from '../../services/auditLogService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ function AccountsTab() {
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing]       = useState(null)
   const [deleting, setDeleting]     = useState(null)
+  const [resetting, setResetting]   = useState(null)
   const [search, setSearch]         = useState('')
 
   const debouncedSearch = useDebounce(search, 300)
@@ -84,6 +86,11 @@ function AccountsTab() {
     } finally {
       setDeleting(null)
     }
+  }
+
+  const handleResetPassword = async (newPassword) => {
+    await resetPassword(resetting.id, { newPassword })
+    toast.show(`Password reset for "${resetting.fullName || resetting.username}".`, 'success')
   }
 
   return (
@@ -163,6 +170,12 @@ function AccountsTab() {
                         <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                       </svg>
                     </button>
+                    <button onClick={() => setResetting(user)} title="Reset password"
+                      className="p-2 rounded-md text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all duration-150">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                      </svg>
+                    </button>
                     <button onClick={() => setDeleting(user)} title="Delete account"
                       className="p-2 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-950/40 transition-all duration-150">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -215,6 +228,12 @@ function AccountsTab() {
                               <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                             </svg>
                           </button>
+                          <button onClick={() => setResetting(user)} title="Reset password"
+                            className="p-1.5 rounded-md text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all duration-150">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                            </svg>
+                          </button>
                           <button onClick={() => setDeleting(user)} title="Delete account"
                             className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-950/40 transition-all duration-150">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -234,6 +253,7 @@ function AccountsTab() {
 
       {showCreate && <UserModal onClose={() => setShowCreate(false)} onSave={handleCreate} />}
       {editing   && <UserModal initial={editing} onClose={() => setEditing(null)} onSave={handleUpdate} />}
+      {resetting && <ResetPasswordModal user={resetting} onClose={() => setResetting(null)} onSave={handleResetPassword} />}
       {deleting  && (
         <ConfirmDialog
           title="Delete this account?"

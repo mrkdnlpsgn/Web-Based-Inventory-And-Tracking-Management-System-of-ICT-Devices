@@ -1,8 +1,10 @@
 package com.sanjose.inventory.controller;
 
+import com.sanjose.inventory.dto.ForgotPasswordRequest;
 import com.sanjose.inventory.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -52,6 +54,13 @@ public class AuthController {
         cookie.setMaxAge(0);
         response.addCookie(cookie);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest req) {
+        authService.forgotPassword(req.username(), req.newPassword());
+        return ResponseEntity.ok(Map.of("message",
+            "If an account with that username exists, its password has been reset."));
     }
 
     @GetMapping("/me")
