@@ -1,3 +1,6 @@
+const EASE_ENTER = 'cubic-bezier(0.16, 1, 0.3, 1)' // strong ease-out — used for every entrance animation
+const EASE_EXIT  = 'cubic-bezier(0.25, 1, 0.5, 1)' // slightly softer ease-out — used for exits and a couple of fades
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
@@ -28,16 +31,16 @@ export default {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }],
       },
       animation: {
-        'fade-slide':     'fadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
-        'fade-in':        'fadeIn 0.2s cubic-bezier(0.25, 1, 0.5, 1) both',
-        'slide-in-right': 'slideInRight 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
-        'toast-out':      'toastOut 0.2s cubic-bezier(0.25, 1, 0.5, 1) forwards',
-        'slide-down':     'slideDown 0.26s cubic-bezier(0.16, 1, 0.3, 1)',
-        'slide-up':       'slideUp 0.18s cubic-bezier(0.25, 1, 0.5, 1) forwards',
-        'scale-in':          'scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
-        'slide-in-drawer':   'slideInDrawer 0.32s cubic-bezier(0.16, 1, 0.3, 1) both',
-        'slide-out-drawer':  'slideOutDrawer 0.22s cubic-bezier(0.25, 1, 0.5, 1) both',
-        'fade-out':          'fadeOut 0.2s cubic-bezier(0.25, 1, 0.5, 1) both',
+        'fade-slide':        `fadeSlide 0.28s ${EASE_ENTER}`,
+        'fade-in':           `fadeIn 0.2s ${EASE_EXIT} both`,
+        'slide-in-right':    `slideInRight 0.32s ${EASE_ENTER}`,
+        'toast-out':         `toastOut 0.2s ${EASE_EXIT} forwards`,
+        'slide-down':        `slideDown 0.26s ${EASE_ENTER}`,
+        'slide-up':          `slideUp 0.18s ${EASE_EXIT} forwards`,
+        'scale-in':          `scaleIn 0.22s ${EASE_ENTER}`,
+        'slide-in-drawer':   `slideInDrawer 0.32s ${EASE_ENTER} both`,
+        'slide-out-drawer':  `slideOutDrawer 0.22s ${EASE_EXIT} both`,
+        'fade-out':          `fadeOut 0.2s ${EASE_EXIT} both`,
       },
       keyframes: {
         fadeSlide: {

@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../provider/paginated_list_notifier.dart';
 import 'skeleton.dart';
 import 'error_state.dart';
+import 'staggered_entrance.dart';
 
 class PaginatedListView<T> extends StatefulWidget {
   final PaginatedListState<T> state;
@@ -10,6 +12,10 @@ class PaginatedListView<T> extends StatefulWidget {
   final VoidCallback onLoadMore;
   final Future<void> Function() onRefresh;
   final String emptyMessage;
+  // Additional bottom clearance beyond the list's own 80px breathing room —
+  // e.g. context.mainShellBottomInset when this list sits inside the bottom
+  // nav shell (MainShell.extendBody lets content scroll behind the bar).
+  final double extraBottomPadding;
 
   const PaginatedListView({
     super.key,
@@ -18,6 +24,7 @@ class PaginatedListView<T> extends StatefulWidget {
     required this.onLoadMore,
     required this.onRefresh,
     required this.emptyMessage,
+    this.extraBottomPadding = 0,
   });
 
   @override
@@ -26,6 +33,12 @@ class PaginatedListView<T> extends StatefulWidget {
 
 class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   final _scrollCtrl = ScrollController();
+
+  // How many rows have already appeared once. A pull-to-refresh or a new
+  // search reuses this same State (only `widget.state` changes), so rows
+  // below this mark skip the entrance stagger — only a true first load, or
+  // rows newly revealed by pagination/a wider result set, animate in.
+  int _seenCount = 0;
 
   @override
   void initState() {
@@ -62,12 +75,15 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
       return Center(child: Text(widget.emptyMessage, style: TextStyle(color: context.colors.textTertiary)));
     }
 
+    final seenCount = _seenCount;
+    _seenCount = math.max(_seenCount, s.items.length);
+
     return RefreshIndicator(
       color: AppTheme.brand,
       onRefresh: widget.onRefresh,
       child: ListView.separated(
         controller: _scrollCtrl,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 80 + widget.extraBottomPadding),
         itemCount: s.items.length + (s.hasMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
@@ -104,7 +120,8 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
               ),
             );
           }
-          return widget.itemBuilder(context, s.items[i], i);
+          final item = widget.itemBuilder(context, s.items[i], i);
+          return i < seenCount ? item : StaggeredEntrance(index: i, child: item);
         },
       ),
     );

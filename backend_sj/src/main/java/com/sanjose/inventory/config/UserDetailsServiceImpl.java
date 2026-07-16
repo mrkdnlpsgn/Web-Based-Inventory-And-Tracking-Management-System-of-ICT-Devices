@@ -22,9 +22,10 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         User user = userRepository.findByUsernameIgnoreCase(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        return new org.springframework.security.core.userdetails.User(
+        return new AppUserDetails(
                 user.getUsername(),
                 user.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().toUpperCase())));
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().toUpperCase())),
+                user.getTokenVersion());
     }
 }

@@ -28,6 +28,7 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final WebhookVerificationFilter webhookVerificationFilter;
+    private final IdempotencyFilter idempotencyFilter;
 
     // Comma-separated list of allowed CORS origins — override via env var in production
     @Value("${cors.allowed-origins:http://localhost:3000}")
@@ -35,10 +36,12 @@ public class SecurityConfig {
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
                           RateLimitingFilter rateLimitingFilter,
-                          WebhookVerificationFilter webhookVerificationFilter) {
+                          WebhookVerificationFilter webhookVerificationFilter,
+                          IdempotencyFilter idempotencyFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.rateLimitingFilter = rateLimitingFilter;
         this.webhookVerificationFilter = webhookVerificationFilter;
+        this.idempotencyFilter = idempotencyFilter;
     }
 
     @Bean
@@ -122,10 +125,13 @@ public class SecurityConfig {
                 // All other endpoints: any authenticated user
                 .anyRequest().authenticated()
             )
-            // Filter order: rate-limit → webhook-verify → JWT-auth → Spring auth
+            // Filter order: rate-limit → webhook-verify → JWT-auth → idempotency → Spring auth
+            // (idempotency needs to run after JWT-auth so SecurityContextHolder already
+            // has the authenticated principal to scope the key by)
             .addFilterBefore(rateLimitingFilter,           UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(webhookVerificationFilter,    UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtAuthFilter,                UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthFilter,                UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(idempotencyFilter,             JwtAuthFilter.class);
         return http.build();
     }
 
@@ -160,7 +166,9 @@ public class SecurityConfig {
         config.setAllowedHeaders(List.of(
             "Content-Type", "Authorization", "X-Requested-With", "Accept",
             // Webhook headers — needed when frontend simulates scanner hardware
-            "X-Webhook-Signature-256", "X-Webhook-Timestamp", "X-Webhook-Id"
+            "X-Webhook-Signature-256", "X-Webhook-Timestamp", "X-Webhook-Id",
+            // Lets clients opt individual create requests into duplicate-submission protection
+            "Idempotency-Key"
         ));
         // Expose rate-limit headers so clients can handle back-pressure gracefully
         config.setExposedHeaders(List.of("Retry-After", "X-RateLimit-Reset"));

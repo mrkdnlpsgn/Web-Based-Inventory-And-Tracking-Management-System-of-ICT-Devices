@@ -134,6 +134,16 @@ class _AccountCard extends StatelessWidget {
                       Text(account.officeName!,
                           style: TextStyle(color: context.colors.textSecondary, fontSize: 12), overflow: TextOverflow.ellipsis),
                     ],
+                    const SizedBox(height: 2),
+                    Text(
+                      account.email ?? 'No email on file (forgot-password unavailable)',
+                      style: TextStyle(
+                        color: account.email != null ? context.colors.textTertiary : Colors.amber,
+                        fontSize: 11.5,
+                        fontStyle: account.email != null ? FontStyle.normal : FontStyle.italic,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),

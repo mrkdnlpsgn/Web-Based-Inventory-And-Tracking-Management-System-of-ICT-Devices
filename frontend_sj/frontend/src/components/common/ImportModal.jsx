@@ -18,7 +18,7 @@ function buildPrintCard(item, svgHTML) {
       <p class="sub">${escapeHtml(item.equipmentType) || ''}</p>
       <p class="sub">${loc}</p>
       <span class="badge">${escapeHtml(item.itemCode) || ''}</span>
-      <p class="org">San Jose Municipal Hall · ICT Inventory System</p>
+      <p class="org">San Jose Municipal Hall · GSO Inventory Management System</p>
     </div>`
 }
 
@@ -60,7 +60,7 @@ function printAllQRCodes(savedItems) {
       @media print { @page { margin: 10mm; } body { padding: 0; } }
     </style>
   </head><body>
-    <h1>ICT Inventory QR Codes — San Jose Municipal Hall (${cards.length} record${cards.length !== 1 ? 's' : ''})</h1>
+    <h1>GSO Inventory QR Codes — San Jose Municipal Hall (${cards.length} record${cards.length !== 1 ? 's' : ''})</h1>
     <div class="grid">${cards.join('')}</div>
     <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}<\/script>
   </body></html>`)

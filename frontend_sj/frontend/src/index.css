@@ -91,4 +91,13 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Reduced motion means gentler, not zero — keep short opacity/color
+     transitions that aid comprehension (hover, focus, toast fade-in);
+     only movement (transform/position) is fully suppressed above. */
+  *[class*="transition-opacity"],
+  *[class*="transition-colors"],
+  *[class*="transition-all"] {
+    transition-duration: 150ms !important;
+  }
 }

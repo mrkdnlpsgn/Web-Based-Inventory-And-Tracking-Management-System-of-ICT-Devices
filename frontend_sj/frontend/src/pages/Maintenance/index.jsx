@@ -84,8 +84,8 @@ function Maintenance() {
   useEffect(() => { fetchRecords(debouncedSearch) }, [debouncedSearch, fetchRecords])
   useEffect(() => { setPage(1) }, [debouncedSearch, filterStatus, filterType, assetFilter])
 
-  const handleCreate = async (payload) => {
-    const { data } = await createMaintenance(payload)
+  const handleCreate = async (payload, idempotencyKey) => {
+    const { data } = await createMaintenance(payload, idempotencyKey)
     setRecords((prev) => [data, ...prev])
     toast.show('Maintenance record added.', 'success')
   }

@@ -20,7 +20,7 @@ Future<void> exportPdf(ReportDefinition report, List<dynamic> rows) async {
           pw.Text(report.title, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 3),
           pw.Text(
-            'San Jose Municipal Hall · ICT Inventory & Tracking Management System · '
+            'San Jose Municipal Hall · GSO Inventory Management System · '
             'Generated: ${DateTime.now().toString().substring(0, 16)} · ${rows.length} record(s)',
             style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
           ),

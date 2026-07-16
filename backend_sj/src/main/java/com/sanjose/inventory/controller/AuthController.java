@@ -1,5 +1,7 @@
 package com.sanjose.inventory.controller;
 
+import com.sanjose.inventory.dto.ForceChangePasswordRequest;
+import com.sanjose.inventory.dto.ForgotPasswordConfirmRequest;
 import com.sanjose.inventory.dto.ForgotPasswordRequest;
 import com.sanjose.inventory.service.AuthService;
 import jakarta.servlet.http.Cookie;
@@ -34,15 +36,35 @@ public class AuthController {
         String password   = body.get("password");
         Map<String, Object> result = authService.login(identifier, password);
 
-        String token = (String) result.get("token");
+        // Correct credentials, but a temp password — no session yet, frontend must
+        // collect a new password via /force-change-password before one is issued.
+        if (Boolean.TRUE.equals(result.get("mustChangePassword"))) {
+            return ResponseEntity.ok(Map.of(
+                "mustChangePassword", true,
+                "username", result.get("username")));
+        }
+
+        setSessionCookie(response, (String) result.get("token"));
+        return ResponseEntity.ok(Map.of("user", result.get("user")));
+    }
+
+    @PostMapping("/force-change-password")
+    public ResponseEntity<Map<String, Object>> forceChangePassword(@Valid @RequestBody ForceChangePasswordRequest req,
+                                                                    HttpServletResponse response) {
+        Map<String, Object> result = authService.forceChangePassword(
+            req.identifier(), req.currentPassword(), req.newPassword());
+
+        setSessionCookie(response, (String) result.get("token"));
+        return ResponseEntity.ok(Map.of("user", result.get("user")));
+    }
+
+    private void setSessionCookie(HttpServletResponse response, String token) {
         Cookie cookie = new Cookie("jwt", token);
         cookie.setHttpOnly(true);
         cookie.setSecure(cookieSecure);
         cookie.setPath("/");
         cookie.setMaxAge(jwtExpiration / 1000);
         response.addCookie(cookie);
-
-        return ResponseEntity.ok(Map.of("user", result.get("user")));
     }
 
     @PostMapping("/logout")
@@ -56,11 +78,17 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/forgot-password")
-    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest req) {
-        authService.forgotPassword(req.username(), req.newPassword());
+    @PostMapping("/forgot-password/request")
+    public ResponseEntity<Map<String, String>> requestPasswordReset(@Valid @RequestBody ForgotPasswordRequest req) {
+        authService.requestPasswordReset(req.username());
         return ResponseEntity.ok(Map.of("message",
-            "If an account with that username exists, its password has been reset."));
+            "If an account with that username has an email on file, a verification code has been sent to it."));
+    }
+
+    @PostMapping("/forgot-password/confirm")
+    public ResponseEntity<Map<String, String>> confirmPasswordReset(@Valid @RequestBody ForgotPasswordConfirmRequest req) {
+        authService.confirmPasswordReset(req.username(), req.otp(), req.newPassword());
+        return ResponseEntity.ok(Map.of("message", "Password reset successfully."));
     }
 
     @GetMapping("/me")

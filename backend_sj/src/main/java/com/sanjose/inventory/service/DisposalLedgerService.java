@@ -39,6 +39,8 @@ public class DisposalLedgerService {
         d.setInspectionDate(inspDate != null ? inspDate.toLocalDate() : null);
         Timestamp createdTs = rs.getTimestamp("createdAt");
         d.setCreatedAt(createdTs != null ? createdTs.toLocalDateTime() : null);
+        Timestamp updatedTs = rs.getTimestamp("updatedAt");
+        d.setUpdatedAt(updatedTs != null ? updatedTs.toLocalDateTime() : null);
 
         Long assetId = rs.getObject("asset_id", Long.class);
         if (assetId != null) {

@@ -216,20 +216,35 @@ class _AiSummaryCardState extends ConsumerState<_AiSummaryCard> {
               ],
             ),
             const SizedBox(height: 12),
-            summaryAsync.when(
+            AnimatedSwitcher(
+              duration: AppTheme.motionMedium,
+              switchInCurve: AppTheme.motionCurve,
+              switchOutCurve: AppTheme.motionCurve,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SizeTransition(sizeFactor: animation, alignment: Alignment.topCenter, child: child),
+              ),
+              child: summaryAsync.when(
               loading: () => const Padding(
+                key: ValueKey('loading'),
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
               ),
-              error: (e, _) => Text(e.toString(), style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+              error: (e, _) => Text(
+                key: const ValueKey('error'),
+                e.toString(),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+              ),
               data: (summary) {
                 if (summary == null) {
                   return Text(
+                    key: const ValueKey('empty'),
                     isAdmin ? 'No summary yet. Tap refresh to generate one.' : 'No summary generated yet.',
                     style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                   );
                 }
                 return Column(
+                  key: ValueKey('data-${summary.generatedAt}'),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(summary.summary,
@@ -240,6 +255,7 @@ class _AiSummaryCardState extends ConsumerState<_AiSummaryCard> {
                   ],
                 );
               },
+              ),
             ),
           ],
         ),

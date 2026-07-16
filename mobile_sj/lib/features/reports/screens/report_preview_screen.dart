@@ -26,6 +26,12 @@ class _ReportPreviewScreenState extends ConsumerState<ReportPreviewScreen> {
     setState(() => _exporting = true);
     try {
       await action();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Export ready.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     } catch (e) {
       debugPrint('Report export failed: $e');
       if (mounted) {

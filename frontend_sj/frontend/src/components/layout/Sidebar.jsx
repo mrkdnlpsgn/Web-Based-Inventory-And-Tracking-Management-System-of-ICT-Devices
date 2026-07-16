@@ -124,7 +124,7 @@ const adminNavItems = [
   },
   {
     to: '/accounts',
-    alsoActiveOn: ['/audit-logs', '/my-account'],
+    alsoActiveOn: ['/my-account'],
     label: 'Accounts',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-[18px] w-[18px] flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
@@ -179,8 +179,10 @@ function NavItemLink({ to, label, icon, alsoActiveOn, isCollapsed, pathname, has
           absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50
           bg-slate-800 dark:bg-zinc-800 border border-slate-700 dark:border-zinc-700 text-white text-xs font-medium
           px-2.5 py-1.5 rounded-lg shadow-xl pointer-events-none whitespace-nowrap
-          opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100
-          transition-all duration-150
+          opacity-0 scale-95 origin-left
+          [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100
+          [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-100
+          transition-[opacity,transform] duration-150
         ">
           {label}
           <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-800 dark:border-r-zinc-800" />
@@ -215,7 +217,7 @@ function Sidebar({ isCollapsed, onToggle, onHelp, isMobileOpen, onMobileClose })
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         h-full bg-white dark:bg-zinc-950 border-r border-slate-200 dark:border-zinc-800
         flex flex-col flex-shrink-0 overflow-x-hidden
-        transition-transform lg:transition-all duration-300 ease-in-out
+        transition-[transform,width] duration-300 ease-in-out
       `}
     >
       {/* Brand */}
@@ -227,8 +229,9 @@ function Sidebar({ isCollapsed, onToggle, onHelp, isMobileOpen, onMobileClose })
             className="rounded-full object-cover bg-white flex-shrink-0 ring-1 ring-slate-200 dark:ring-white/10 w-8 h-8"
           />
           <div className="overflow-hidden">
-            <p className="text-sm font-semibold text-slate-900 dark:text-white whitespace-nowrap leading-tight">ICT Inventory</p>
-            <p className="text-2xs text-slate-400 dark:text-zinc-500 whitespace-nowrap leading-tight mt-px">Management System</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white whitespace-nowrap leading-tight">San Jose GSO</p>
+            <p className="text-2xs text-slate-400 dark:text-zinc-500 whitespace-nowrap leading-tight mt-px">Inventory Management</p>
+            <p className="text-2xs text-slate-400 dark:text-zinc-500 whitespace-nowrap leading-tight">System</p>
           </div>
         </div>
         {/* Collapse toggle — desktop only */}

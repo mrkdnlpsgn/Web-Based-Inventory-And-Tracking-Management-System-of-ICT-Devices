@@ -28,23 +28,30 @@ CREATE TABLE offices (
 -- TABLE: users
 -- =============================================================
 CREATE TABLE users (
-    user_id                 INT             NOT NULL AUTO_INCREMENT,
-    username                VARCHAR(50)     NOT NULL,
-    password_hash           VARCHAR(255)    NOT NULL COMMENT 'BCrypt-hashed password',
-    full_name               VARCHAR(100)    NOT NULL,
-    `role`                  ENUM(
-                                'ADMIN',
-                                'STAFF'
-                            )               NOT NULL,
-    office_id               INT             NULL,
-    is_active               BOOLEAN         NOT NULL DEFAULT TRUE,
-    failed_login_attempts   INT             NOT NULL DEFAULT 0,
-    account_locked_until    DATETIME        NULL,
-    last_password_reset_at  DATETIME        NULL,
-    created_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id                     INT             NOT NULL AUTO_INCREMENT,
+    username                    VARCHAR(50)     NOT NULL,
+    email                       VARCHAR(255)    NULL COMMENT 'Used only for forgot-password OTP delivery, not login',
+    password_hash               VARCHAR(255)    NOT NULL COMMENT 'BCrypt-hashed password',
+    full_name                   VARCHAR(100)    NOT NULL,
+    `role`                      ENUM(
+                                    'ADMIN',
+                                    'STAFF'
+                                )               NOT NULL,
+    office_id                   INT             NULL,
+    is_active                   BOOLEAN         NOT NULL DEFAULT TRUE,
+    failed_login_attempts       INT             NOT NULL DEFAULT 0,
+    account_locked_until        DATETIME        NULL,
+    token_version                INT            NOT NULL DEFAULT 0 COMMENT 'Bumped on password change to invalidate outstanding JWTs',
+    must_change_password        BOOLEAN         NOT NULL DEFAULT TRUE COMMENT 'Forces a password change on next login — set on account creation and admin-mediated resets',
+    last_password_reset_at      DATETIME        NULL,
+    password_reset_otp_hash        VARCHAR(255) NULL COMMENT 'BCrypt-hashed 6-digit OTP, cleared after use/expiry',
+    password_reset_otp_expires_at  DATETIME     NULL,
+    password_reset_otp_attempts    INT          NOT NULL DEFAULT 0,
+    created_at                  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_users         PRIMARY KEY (user_id),
     CONSTRAINT uq_users_uname   UNIQUE (username),
+    CONSTRAINT uq_users_email   UNIQUE (email),
     CONSTRAINT fk_users_office  FOREIGN KEY (office_id)
         REFERENCES offices (office_id)
         ON UPDATE CASCADE
@@ -198,6 +205,8 @@ CREATE TABLE maintenance_ledger (
                         COMMENT 'User who soft-deleted this record (ref: users)',
     delete_reason       TEXT            NULL,
     created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                                 ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_maintenance           PRIMARY KEY (maintenance_id),
     CONSTRAINT fk_ml_asset              FOREIGN KEY (asset_id)
@@ -245,6 +254,8 @@ CREATE TABLE disposal_ledger (
                             COMMENT 'User who soft-deleted this record (ref: users)',
     delete_reason           TEXT    NULL,
     created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                              ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_disposal              PRIMARY KEY (disposal_id),
     CONSTRAINT fk_dl_asset              FOREIGN KEY (asset_id)
@@ -602,6 +613,25 @@ ON DUPLICATE KEY UPDATE
   full_name     = VALUES(full_name),
   `role`        = VALUES(`role`),
   is_active     = TRUE;
+
+-- =============================================================
+-- TABLE: idempotency_keys
+-- Cross-cutting infra (not domain data), so accessed via plain JdbcTemplate SQL in
+-- IdempotencyService rather than stored procedures. Guards POST create endpoints
+-- against duplicate submission (double-tap, client retry after a dropped response).
+-- =============================================================
+CREATE TABLE idempotency_keys (
+    idempotency_key   VARCHAR(255)  NOT NULL,
+    request_method    VARCHAR(10)   NOT NULL,
+    request_path      VARCHAR(255)  NOT NULL,
+    username          VARCHAR(50)   NOT NULL,
+    response_status   INT           NULL COMMENT 'NULL = claimed but still in progress',
+    response_body     LONGTEXT      NULL,
+    created_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at      DATETIME      NULL,
+
+    CONSTRAINT pk_idempotency_keys PRIMARY KEY (idempotency_key, request_method, request_path)
+) ENGINE=InnoDB;
 
 -- =============================================================
 -- END OF SCHEMA

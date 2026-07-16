@@ -3,7 +3,10 @@ package com.sanjose.inventory.controller;
 import com.sanjose.inventory.dto.AssetRequest;
 import com.sanjose.inventory.entity.Asset;
 import com.sanjose.inventory.service.AssetService;
+import com.sanjose.inventory.service.QrCodeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +19,7 @@ import java.util.Map;
 public class AssetController {
 
     private final AssetService assetService;
+    private final QrCodeService qrCodeService;
 
     @GetMapping
     public List<Asset> getAll(@RequestParam(required = false) String search,
@@ -30,6 +34,21 @@ public class AssetController {
 
     @GetMapping("/{id}")
     public Asset getById(@PathVariable Long id) { return assetService.findById(id); }
+
+    // Payload format (`asset:{id}:{propertyNumber}`) matches the one the mobile app
+    // already generates client-side, so codes printed from either source scan the same.
+    @GetMapping(value = "/{id}/qr", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> getQrCode(@PathVariable Long id,
+                                            @RequestParam(defaultValue = "300") int size) {
+        Asset asset = assetService.findById(id);
+        String payload = "asset:" + asset.getId() + ":" + asset.getPropertyNumber();
+        int clampedSize = Math.min(Math.max(size, 64), 1000);
+        byte[] png = qrCodeService.generatePng(payload, clampedSize);
+        return ResponseEntity.ok()
+            .cacheControl(CacheControl.noStore())
+            .contentType(MediaType.IMAGE_PNG)
+            .body(png);
+    }
 
     @PostMapping
     public Asset create(@RequestBody AssetRequest req) { return assetService.create(req); }

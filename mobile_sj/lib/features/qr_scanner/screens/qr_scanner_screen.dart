@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -8,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../assets/model/asset_model.dart';
 import '../../reports/utils/formatters.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/main_shell.dart';
 import '../provider/qr_lookup_provider.dart';
 
 // mobile_scanner only ships Android/iOS/macOS/web implementations — desktop platforms
@@ -51,6 +53,14 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     if (assets == null) return;
 
     final match = findAssetForCode(assets, rawCode);
+    // Close the loop on the moment of detection — same frame as the visual
+    // result, per the causality/harmony rule for combining feedback senses.
+    // Distinct weights so success and "not found" feel different, not just look different.
+    if (match != null) {
+      HapticFeedback.mediumImpact();
+    } else {
+      HapticFeedback.lightImpact();
+    }
     setState(() {
       _result = match;
       _notFound = match == null;
@@ -87,7 +97,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('QR Asset Lookup')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
         children: [
           if (_cameraScanSupported) _buildCameraPanel(),
           if (_cameraScanSupported) const SizedBox(height: 16),

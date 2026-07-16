@@ -173,23 +173,6 @@ List<ReportDefinition> buildReportDefinitions() {
       ],
     ),
     ReportDefinition(
-      id: 'disposal',
-      title: 'Disposal Ledger',
-      subtitle: 'All disposal records for unserviceable ICT assets.',
-      icon: Icons.delete_outline_rounded,
-      color: AppTheme.statusDisposed,
-      load: () => disposalService.getAll(size: _kAllRowsSize),
-      columns: [
-        ReportColumn('Asset', (row) => row.asset.description as String),
-        ReportColumn('Reason', (row) => row.reason as String),
-        ReportColumn('Method', (row) => row.recommendedMethod as String),
-        ReportColumn('Status', (row) => row.disposalStatus as String),
-        ReportColumn('Inspection Date', (row) => fmtDate(row.inspectionDate as String)),
-        ReportColumn('Approved By', (row) => row.approvedBy ?? '—'),
-        ReportColumn('Recorded By', (row) => row.recordedBy.fullName as String),
-      ],
-    ),
-    ReportDefinition(
       id: 'rpcppe',
       title: 'RPCPPE (Physical Count)',
       subtitle: 'COA-format Report on the Physical Count of Property, Plant and Equipment — '

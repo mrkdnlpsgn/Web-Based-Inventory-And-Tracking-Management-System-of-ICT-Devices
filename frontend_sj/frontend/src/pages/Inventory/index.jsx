@@ -126,10 +126,18 @@ function Inventory() {
   const PAGE_SIZE = 8
   const location = useLocation()
   const skipPageReset = useRef(false)
+  const afterExitRef = useRef(null)
 
+  // Cleanup runs off RecordDrawer's own `animationend` (see handleDetailAnimationEnd
+  // below), not a hand-timed setTimeout — avoids a stale timer clobbering a
+  // newly-opened record if the drawer is reopened before the old close finishes.
   const closeDetail = useCallback(() => {
     setDetailExiting(true)
-    setTimeout(() => { setDetailRecord(null); setDetailExiting(false) }, 220)
+  }, [])
+
+  const handleDetailAnimationEnd = useCallback(() => {
+    setDetailRecord(null)
+    setDetailExiting(false)
   }, [])
 
   // Clean up pending delete timeout on unmount
@@ -208,9 +216,9 @@ function Inventory() {
   }, [location.state, records, loading])
 
   // ── CRUD handlers ───────────────────────────────────────────────────────────
-  const handleSave = async (newRecord) => {
+  const handleSave = async (newRecord, idempotencyKey) => {
     try {
-      const { data } = await createEquipment(newRecord)
+      const { data } = await createEquipment(newRecord, idempotencyKey)
       dispatch(addItem(data))
       toast.show('Inventory record added.', 'success')
       return data
@@ -236,14 +244,20 @@ function Inventory() {
     setDeletingRecord(record)
   }
 
-  const exitUndoBanner = (afterExit) => {
+  // afterExit is per-call, so it's stashed in a ref rather than component state —
+  // handleUndoBannerAnimationEnd (fired by the banner's own animationend, not a
+  // timer) reads it once the exit animation actually finishes.
+  const exitUndoBanner = useCallback((afterExit) => {
+    afterExitRef.current = afterExit ?? null
     setUndoBannerExiting(true)
-    setTimeout(() => {
-      setUndoDelete(null)
-      setUndoBannerExiting(false)
-      afterExit?.()
-    }, 180)
-  }
+  }, [])
+
+  const handleUndoBannerAnimationEnd = useCallback(() => {
+    setUndoDelete(null)
+    setUndoBannerExiting(false)
+    afterExitRef.current?.()
+    afterExitRef.current = null
+  }, [])
 
   const handleDelete = () => {
     const record = deletingRecord
@@ -364,6 +378,7 @@ function Inventory() {
           className={`flex items-center justify-between px-4 py-3 mb-4 rounded-lg border border-amber-700/40 bg-amber-950/30 ${
             undoBannerExiting ? 'animate-slide-up' : 'animate-slide-down'
           }`}
+          onAnimationEnd={undoBannerExiting ? handleUndoBannerAnimationEnd : undefined}
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
@@ -624,6 +639,7 @@ function Inventory() {
           record={detailRecord ?? {}}
           exiting={detailExiting}
           onClose={closeDetail}
+          onExitAnimationEnd={handleDetailAnimationEnd}
           onEdit={(rec) => setEditingRecord(rec)}
           onQR={(rec) => setQrItem(rec)}
           onDelete={handleDetailDelete}

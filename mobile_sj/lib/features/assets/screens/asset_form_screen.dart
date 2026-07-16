@@ -9,8 +9,10 @@ import '../../../shared/data/reference_service.dart';
 import '../../../shared/provider/reference_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_exception.dart';
+import '../../../shared/widgets/main_shell.dart';
 import '../../maintenance/data/maintenance_service.dart';
 import '../../disposal/data/disposal_service.dart';
+import '../../../shared/utils/idempotency.dart';
 
 class AssetFormScreen extends ConsumerStatefulWidget {
   final AssetModel? asset; // null = create, non-null = edit
@@ -23,6 +25,7 @@ class AssetFormScreen extends ConsumerStatefulWidget {
 class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
+  final String _idempotencyKey = newIdempotencyKey();
 
   late final TextEditingController _propertyNumber;
   late final TextEditingController _description;
@@ -56,7 +59,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     _quantity = TextEditingController(text: a?.quantity.toString() ?? '1');
     _unitValue = TextEditingController(text: a?.unitValue.toStringAsFixed(2) ?? '');
     _accountablePerson = TextEditingController(text: a?.accountablePerson ?? '');
-    _physicalCount = TextEditingController(text: a?.physicalCount?.toString() ?? '');
+    _physicalCount = TextEditingController(text: a?.physicalCount?.toString() ?? '1');
     _remarks = TextEditingController(text: a?.remarks ?? '');
     _categoryId = a?.category.id;
     _officeId = a?.office.id;
@@ -128,7 +131,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       if (_isEdit) {
         saved = await service.update(widget.asset!.id, data);
       } else {
-        saved = await service.create(data);
+        saved = await service.create(data, idempotencyKey: _idempotencyKey);
       }
       ref.invalidate(assetsPagedProvider(ref.read(assetSearchProvider)));
 
@@ -182,9 +185,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
           data: (offices) => Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
               children: [
-                _field(_propertyNumber, 'Property Number', required: true),
+                _field(_propertyNumber, 'Property Number (optional — auto-generated if blank)'),
                 _field(_description, 'Description', required: true),
                 _dropdown<CategoryModel>(
                   label: 'Category',
@@ -196,7 +199,12 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                     _suggestedCategory = null;
                   }),
                 ),
-                if (_suggestedCategory != null) _categorySuggestionChip(),
+                AnimatedSize(
+                  duration: AppTheme.motionFast,
+                  curve: AppTheme.motionCurve,
+                  alignment: Alignment.topCenter,
+                  child: _suggestedCategory != null ? _categorySuggestionChip() : const SizedBox.shrink(),
+                ),
                 _field(_quantity, 'Quantity', keyboardType: TextInputType.number, required: true),
                 _datePicker(),
                 _field(_unitValue, 'Unit Value (₱)', keyboardType: TextInputType.number, required: true),
@@ -212,9 +220,6 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 _enumDropdown('Condition', _condition,
                   ['SERVICEABLE', 'REPAIRABLE', 'UNSERVICEABLE'],
                   (v) => setState(() => _condition = v!)),
-                _enumDropdown('Lifecycle Status', _lifecycleStatus,
-                  ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'UNDER_MAINTENANCE', 'DISPOSED', 'ARCHIVED'],
-                  (v) => setState(() => _lifecycleStatus = v!)),
                 _field(_remarks, 'Remarks', maxLines: 3),
                 const SizedBox(height: 24),
                 SizedBox(

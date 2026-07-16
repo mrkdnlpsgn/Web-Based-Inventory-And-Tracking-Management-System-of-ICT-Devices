@@ -45,9 +45,10 @@ class MaintenanceService {
     }
   }
 
-  Future<MaintenanceModel> create(Map<String, dynamic> data) async {
+  Future<MaintenanceModel> create(Map<String, dynamic> data, {String? idempotencyKey}) async {
     try {
-      final res = await _dio.post('/maintenance', data: data);
+      final res = await _dio.post('/maintenance', data: data,
+          options: idempotencyKey != null ? Options(headers: {'Idempotency-Key': idempotencyKey}) : null);
       return MaintenanceModel.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw ApiException.from(e);

@@ -45,9 +45,10 @@ class DisposalService {
     }
   }
 
-  Future<DisposalModel> create(Map<String, dynamic> data) async {
+  Future<DisposalModel> create(Map<String, dynamic> data, {String? idempotencyKey}) async {
     try {
-      final res = await _dio.post('/disposal', data: data);
+      final res = await _dio.post('/disposal', data: data,
+          options: idempotencyKey != null ? Options(headers: {'Idempotency-Key': idempotencyKey}) : null);
       return DisposalModel.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw ApiException.from(e);

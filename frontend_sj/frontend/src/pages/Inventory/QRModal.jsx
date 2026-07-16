@@ -28,7 +28,7 @@ function buildCardHTML(item, device, svgHTML) {
     <p class="sub">${loc}</p>
     ${sn}
     <span class="badge">${code}</span>
-    <p class="org">San Jose Municipal Hall · ICT Inventory System</p>
+    <p class="org">San Jose Municipal Hall · GSO Inventory Management System</p>
   </div>`
 }
 
@@ -68,7 +68,7 @@ function printAllQRs(item, devices) {
     .org { font-size: 9px; margin-top: 8px; padding-top: 6px; }
     @media print { @page { margin: 10mm; } body { padding: 0; } }
   </style></head><body>
-  <h1>ICT Inventory QR Codes — San Jose Municipal Hall (${devices.length} unit${devices.length !== 1 ? 's' : ''})</h1>
+  <h1>GSO Inventory QR Codes — San Jose Municipal Hall (${devices.length} unit${devices.length !== 1 ? 's' : ''})</h1>
   <div class="grid">${cards.join('')}</div>
   <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}<\/script>
   </body></html>`)

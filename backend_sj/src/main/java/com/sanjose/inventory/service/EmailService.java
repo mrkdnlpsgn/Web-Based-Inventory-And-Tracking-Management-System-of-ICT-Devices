@@ -19,11 +19,15 @@ public class EmailService {
     @Value("${mail.from:}")
     private String from;
 
-    @Value("${mail.from-name:SJMH ICT Inventory System}")
+    @Value("${mail.from-name:San Jose GSO Inventory Management System}")
     private String fromName;
 
     @Value("${notifications.enabled:false}")
     private boolean notificationsEnabled;
+
+    public boolean isEnabled() {
+        return notificationsEnabled && from != null && !from.isBlank();
+    }
 
     @Async
     public void send(String to, String subject, String htmlBody) {

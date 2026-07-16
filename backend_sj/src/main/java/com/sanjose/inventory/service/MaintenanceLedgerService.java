@@ -40,6 +40,8 @@ public class MaintenanceLedgerService {
         m.setStatus(status != null ? MaintenanceLedger.MaintenanceStatus.valueOf(status) : null);
         Timestamp createdTs = rs.getTimestamp("createdAt");
         m.setCreatedAt(createdTs != null ? createdTs.toLocalDateTime() : null);
+        Timestamp updatedTs = rs.getTimestamp("updatedAt");
+        m.setUpdatedAt(updatedTs != null ? updatedTs.toLocalDateTime() : null);
 
         Long assetId = rs.getObject("asset_id", Long.class);
         if (assetId != null) {

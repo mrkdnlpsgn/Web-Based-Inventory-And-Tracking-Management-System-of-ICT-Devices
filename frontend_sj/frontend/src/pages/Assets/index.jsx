@@ -57,9 +57,17 @@ function Assets() {
   const [deleting, setDeleting]     = useState(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [selected, setSelected]     = useState(null)
+  const [assetDrawerExiting, setAssetDrawerExiting] = useState(false)
   const [page, setPage]             = useState(1)
 
   const debouncedSearch = useDebounce(search, 300)
+
+  // Plays the drawer's slide-out/fade-out (see AssetDrawer.jsx) before actually
+  // unmounting it, mirroring RecordDrawer.jsx's closeDetail in Inventory/index.jsx.
+  const closeAssetDrawer = useCallback(() => {
+    setAssetDrawerExiting(true)
+    setTimeout(() => { setSelected(null); setAssetDrawerExiting(false) }, 220)
+  }, [])
 
   const fetchAssets = useCallback(async (q = '') => {
     setLoading(true)
@@ -88,8 +96,8 @@ function Assets() {
   useEffect(() => { fetchAssets(debouncedSearch) }, [debouncedSearch, fetchAssets])
   useEffect(() => { setPage(1) }, [debouncedSearch, filterCondition, filterLifecycle, filterCategory])
 
-  const handleCreate = async (payload) => {
-    const { data } = await createAsset(payload)
+  const handleCreate = async (payload, idempotencyKey) => {
+    const { data } = await createAsset(payload, idempotencyKey)
     setItems((prev) => [data, ...prev])
     dispatch(addAsset(data))
     toast.show('Asset created.', 'success')
@@ -291,7 +299,8 @@ function Assets() {
         <AssetDrawer
           asset={selected}
           isAdmin={isAdmin}
-          onClose={() => setSelected(null)}
+          exiting={assetDrawerExiting}
+          onClose={closeAssetDrawer}
           onEdit={(a) => { setEditing(a); setSelected(null) }}
         />
       )}

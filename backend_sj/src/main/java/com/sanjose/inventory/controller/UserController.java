@@ -28,10 +28,10 @@ public class UserController {
     public UserResponse getById(@PathVariable Long id) { return userService.findById(id); }
 
     @PostMapping
-    public UserResponse create(@RequestBody UserRequest req) { return userService.create(req); }
+    public UserResponse create(@Valid @RequestBody UserRequest req) { return userService.create(req); }
 
     @PutMapping("/{id}")
-    public UserResponse update(@PathVariable Long id, @RequestBody UserRequest req) {
+    public UserResponse update(@PathVariable Long id, @Valid @RequestBody UserRequest req) {
         return userService.update(id, req);
     }
 
@@ -49,7 +49,7 @@ public class UserController {
 
     @PutMapping("/me/password")
     public ResponseEntity<Void> changePassword(@AuthenticationPrincipal UserDetails principal,
-                                               @RequestBody ChangePasswordRequest req) {
+                                               @Valid @RequestBody ChangePasswordRequest req) {
         userService.changePassword(principal.getUsername(), req.currentPassword(), req.newPassword());
         return ResponseEntity.ok().build();
     }

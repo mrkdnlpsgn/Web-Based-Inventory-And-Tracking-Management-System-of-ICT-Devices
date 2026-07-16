@@ -5,6 +5,7 @@ import Button from '../../components/common/Button'
 import { addDevice as addDeviceApi, updateDevice as updateDeviceApi } from '../../services/inventoryService'
 import { escapeHtml } from '../../utils/helpers'
 import { buildQrValue } from '../../utils/qrUtils'
+import { newIdempotencyKey } from '../../utils/idempotency'
 
 const QR_CARD_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,7 +30,7 @@ function buildQRCardHTML(equipment, device, svgHTML) {
     <p class="sub">${loc}</p>
     ${sn}
     <span class="badge">${code}</span>
-    <p class="org">San Jose Municipal Hall · ICT Inventory System</p>
+    <p class="org">San Jose Municipal Hall · GSO Inventory Management System</p>
   </div>`
 }
 
@@ -69,7 +70,7 @@ function printAllDeviceQRs(equipment, devices) {
     .org { font-size: 9px; margin-top: 8px; padding-top: 6px; }
     @media print { @page { margin: 10mm; } body { padding: 0; } }
   </style></head><body>
-  <h1>ICT Inventory QR Codes — San Jose Municipal Hall (${devices.length} unit${devices.length !== 1 ? 's' : ''})</h1>
+  <h1>GSO Inventory QR Codes — San Jose Municipal Hall (${devices.length} unit${devices.length !== 1 ? 's' : ''})</h1>
   <div class="grid">${cards.join('')}</div>
   <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}<\/script>
   </body></html>`)
@@ -260,6 +261,7 @@ function AddRecordModal({ onClose, onSave, initialData = null, generatedCode = '
   const [savedItem, setSavedItem] = useState(null)
   const [savedDevices, setSavedDevices] = useState([])
   const [qrTokens, setQrTokens]   = useState({})
+  const [idempotencyKey] = useState(() => newIdempotencyKey())
 
   useEffect(() => {
     if (stage !== 'qr' || !savedItem || savedDevices.length === 0) return
@@ -388,12 +390,12 @@ function AddRecordModal({ onClose, onSave, initialData = null, generatedCode = '
           ...deviceBase,
           itemCode:     form.itemCode,
           serialNumber: form.serialNumbers[0]?.trim() || null,
-        }).catch(() => {})
+        }, `${idempotencyKey}-edit-device`).catch(() => {})
       }
       setSaving(false)
       onClose()
     } else {
-      const item = await onSave(equipmentPayload)
+      const item = await onSave(equipmentPayload, idempotencyKey)
       if (item) {
         if (hasDeviceDetails) {
           const results = await Promise.all(
@@ -402,7 +404,7 @@ function AddRecordModal({ onClose, onSave, initialData = null, generatedCode = '
                 ...deviceBase,
                 itemCode:     form.itemCode,
                 serialNumber: sn.trim() || null,
-              })
+              }, `${idempotencyKey}-device-${i}`)
                 .then((r) => r.data)
                 .catch(() => null)
             )

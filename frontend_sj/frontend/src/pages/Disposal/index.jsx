@@ -82,8 +82,8 @@ function Disposal() {
   useEffect(() => { fetchRecords(debouncedSearch) }, [debouncedSearch, fetchRecords])
   useEffect(() => { setPage(1) }, [debouncedSearch, filterStatus, filterMethod, assetFilter])
 
-  const handleCreate = async (payload) => {
-    const { data } = await createDisposal(payload)
+  const handleCreate = async (payload, idempotencyKey) => {
+    const { data } = await createDisposal(payload, idempotencyKey)
     setRecords((prev) => [data, ...prev])
     toast.show('Disposal record added.', 'success')
   }

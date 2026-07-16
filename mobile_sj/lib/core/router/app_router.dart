@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/provider/auth_provider.dart';
 import '../../features/auth/screens/login_screen.dart';
+import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/assets/screens/asset_list_screen.dart';
 import '../../features/assets/screens/asset_detail_screen.dart';
@@ -23,6 +24,9 @@ import '../../features/reports/screens/reports_list_screen.dart';
 import '../../features/reports/screens/report_preview_screen.dart';
 import '../../features/qr_scanner/screens/qr_scanner_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
+import '../../features/settings/screens/change_password_screen.dart';
+import '../../shared/widgets/main_shell.dart';
+import 'page_transitions.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
@@ -31,54 +35,83 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
-      GoRoute(path: '/assets', builder: (_, __) => const AssetListScreen()),
-      // Static "new" must be declared before the ":id" wildcard below it, or
-      // go_router (which matches routes in list order) would treat "new" as
-      // an :id value instead of resolving this literal route.
-      GoRoute(path: '/assets/new', builder: (_, __) => const AssetFormScreen()),
-      GoRoute(
-        path: '/assets/:id',
-        builder: (_, state) => AssetDetailScreen(assetId: int.parse(state.pathParameters['id']!)),
+      GoRoute(path: '/login', pageBuilder: (c, s) => fadeThroughPage(c, s, const LoginScreen())),
+      GoRoute(path: '/forgot-password', pageBuilder: (c, s) => fadeThroughPage(c, s, const ForgotPasswordScreen())),
+      // The four most-used destinations live in a bottom-nav shell so switching
+      // between them preserves each tab's own navigation stack. Everything else
+      // (Maintenance, Disposal, Reports, Accounts) stays a plain push below,
+      // reachable from the Dashboard's module cards, and covers the bottom bar.
+      StatefulShellRoute.indexedStack(
+        builder: (_, __, navigationShell) => MainShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/dashboard', pageBuilder: (c, s) => fadeThroughPage(c, s, const DashboardScreen())),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/assets',
+              pageBuilder: (c, s) => fadeThroughPage(c, s, const AssetListScreen()),
+              routes: [
+                // Static "new" must be declared before the ":id" wildcard below it, or
+                // go_router (which matches routes in list order) would treat "new" as
+                // an :id value instead of resolving this literal route.
+                GoRoute(path: 'new', pageBuilder: (c, s) => fadeThroughPage(c, s, const AssetFormScreen())),
+                GoRoute(
+                  path: ':id',
+                  pageBuilder: (c, s) => fadeThroughPage(c, s, AssetDetailScreen(assetId: int.parse(s.pathParameters['id']!))),
+                ),
+                GoRoute(
+                  path: ':id/edit',
+                  pageBuilder: (c, s) => fadeThroughPage(c, s, AssetFormScreen(asset: s.extra as AssetModel?)),
+                ),
+              ],
+            ),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/qr-scanner', pageBuilder: (c, s) => fadeThroughPage(c, s, const QrScannerScreen())),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/settings',
+              pageBuilder: (c, s) => fadeThroughPage(c, s, const SettingsScreen()),
+              routes: [
+                GoRoute(path: 'change-password', pageBuilder: (c, s) => fadeThroughPage(c, s, const ChangePasswordScreen())),
+              ],
+            ),
+          ]),
+        ],
       ),
-      GoRoute(
-        path: '/assets/:id/edit',
-        builder: (_, state) => AssetFormScreen(asset: state.extra as AssetModel?),
-      ),
-      GoRoute(path: '/maintenance', builder: (_, __) => const MaintenanceListScreen()),
-      GoRoute(path: '/maintenance/new', builder: (_, __) => const MaintenanceFormScreen()),
+      GoRoute(path: '/maintenance', pageBuilder: (c, s) => fadeThroughPage(c, s, const MaintenanceListScreen())),
+      GoRoute(path: '/maintenance/new', pageBuilder: (c, s) => fadeThroughPage(c, s, const MaintenanceFormScreen())),
       GoRoute(
         path: '/maintenance/:id',
-        builder: (_, state) => MaintenanceDetailScreen(maintenanceId: int.parse(state.pathParameters['id']!)),
+        pageBuilder: (c, s) => fadeThroughPage(c, s, MaintenanceDetailScreen(maintenanceId: int.parse(s.pathParameters['id']!))),
       ),
       GoRoute(
         path: '/maintenance/:id/edit',
-        builder: (_, state) => MaintenanceFormScreen(maintenance: state.extra as MaintenanceModel?),
+        pageBuilder: (c, s) => fadeThroughPage(c, s, MaintenanceFormScreen(maintenance: s.extra as MaintenanceModel?)),
       ),
-      GoRoute(path: '/disposal', builder: (_, __) => const DisposalListScreen()),
-      GoRoute(path: '/disposal/new', builder: (_, __) => const DisposalFormScreen()),
+      GoRoute(path: '/disposal', pageBuilder: (c, s) => fadeThroughPage(c, s, const DisposalListScreen())),
+      GoRoute(path: '/disposal/new', pageBuilder: (c, s) => fadeThroughPage(c, s, const DisposalFormScreen())),
       GoRoute(
         path: '/disposal/:id',
-        builder: (_, state) => DisposalDetailScreen(disposalId: int.parse(state.pathParameters['id']!)),
+        pageBuilder: (c, s) => fadeThroughPage(c, s, DisposalDetailScreen(disposalId: int.parse(s.pathParameters['id']!))),
       ),
       GoRoute(
         path: '/disposal/:id/edit',
-        builder: (_, state) => DisposalFormScreen(disposal: state.extra as DisposalModel?),
+        pageBuilder: (c, s) => fadeThroughPage(c, s, DisposalFormScreen(disposal: s.extra as DisposalModel?)),
       ),
-      GoRoute(path: '/accounts', builder: (_, __) => const AccountListScreen()),
-      GoRoute(path: '/accounts/new', builder: (_, __) => const AccountFormScreen()),
+      GoRoute(path: '/accounts', pageBuilder: (c, s) => fadeThroughPage(c, s, const AccountListScreen())),
+      GoRoute(path: '/accounts/new', pageBuilder: (c, s) => fadeThroughPage(c, s, const AccountFormScreen())),
       GoRoute(
         path: '/accounts/:id/edit',
-        builder: (_, state) => AccountFormScreen(account: state.extra as AccountModel?),
+        pageBuilder: (c, s) => fadeThroughPage(c, s, AccountFormScreen(account: s.extra as AccountModel?)),
       ),
-      GoRoute(path: '/reports', builder: (_, __) => const ReportsListScreen()),
+      GoRoute(path: '/reports', pageBuilder: (c, s) => fadeThroughPage(c, s, const ReportsListScreen())),
       GoRoute(
         path: '/reports/:id',
-        builder: (_, state) => ReportPreviewScreen(reportId: state.pathParameters['id']!),
+        pageBuilder: (c, s) => fadeThroughPage(c, s, ReportPreviewScreen(reportId: s.pathParameters['id']!)),
       ),
-      GoRoute(path: '/qr-scanner', builder: (_, __) => const QrScannerScreen()),
-      GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
     ],
   );
 });
@@ -95,8 +128,9 @@ class _RouterNotifier extends ChangeNotifier {
     if (authAsync.isLoading) return null;
     final isLoggedIn = authAsync.value != null;
     final onLogin = state.matchedLocation == '/login';
-    if (!isLoggedIn && !onLogin) return '/login';
-    if (isLoggedIn && onLogin) return '/dashboard';
+    final onForgotPassword = state.matchedLocation == '/forgot-password';
+    if (!isLoggedIn && !onLogin && !onForgotPassword) return '/login';
+    if (isLoggedIn && (onLogin || onForgotPassword)) return '/dashboard';
     return null;
   }
 }

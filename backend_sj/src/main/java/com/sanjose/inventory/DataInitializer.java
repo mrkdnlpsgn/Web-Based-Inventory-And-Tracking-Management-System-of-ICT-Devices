@@ -44,8 +44,8 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         log.info("DataInitializer: seeding default accounts...");
-        seedUser("admin", "admin123", "Administrator", "ADMIN");
-        seedUser("ict_staff", "ict2024", "ICT Officer", "STAFF");
+        seedUser("admin", "admin123", "Administrator", "ADMIN", "admin@sanjosegso.local");
+        seedUser("ict_staff", "ict2024", "ICT Officer", "STAFF", "ict.staff@sanjosegso.local");
 
         log.info("DataInitializer: seeding default offices...");
         DEFAULT_OFFICES.forEach(this::seedOffice);
@@ -53,7 +53,7 @@ public class DataInitializer implements CommandLineRunner {
         log.info("DataInitializer: done.");
     }
 
-    private void seedUser(String username, String password, String fullName, String role) {
+    private void seedUser(String username, String password, String fullName, String role, String email) {
         userRepository.findByUsernameIgnoreCase(username).ifPresentOrElse(
             existing -> {
                 existing.setFullName(fullName);
@@ -62,6 +62,9 @@ public class DataInitializer implements CommandLineRunner {
                 existing.setFailedLoginAttempts(0);
                 existing.setAccountLockedUntil(null);
                 existing.setIsActive(true);
+                // these are known fixture credentials, not a real temp password — never force a change
+                existing.setMustChangePassword(false);
+                if (existing.getEmail() == null) existing.setEmail(email);
                 userRepository.saveAndFlush(existing);
                 log.info("  reset: {}", username);
             },
@@ -71,7 +74,9 @@ public class DataInitializer implements CommandLineRunner {
                     .password(passwordEncoder.encode(password))
                     .fullName(fullName)
                     .role(role)
+                    .email(email)
                     .isActive(true)
+                    .mustChangePassword(false)
                     .build());
                 log.info("  seeded: {}", username);
             }

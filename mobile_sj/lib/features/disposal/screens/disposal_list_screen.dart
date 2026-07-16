@@ -39,10 +39,17 @@ class _DisposalListScreenState extends ConsumerState<DisposalListScreen> {
         title: const Text('Disposal'),
         actions: [
           IconButton(
-            icon: Badge(
-              isLabelVisible: filtersActive,
-              smallSize: 8,
-              child: const Icon(Icons.filter_list_rounded),
+            icon: AnimatedSwitcher(
+              duration: AppTheme.motionFast,
+              switchInCurve: AppTheme.motionCurve,
+              switchOutCurve: AppTheme.motionCurve,
+              transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+              child: Badge(
+                key: ValueKey(filtersActive),
+                isLabelVisible: filtersActive,
+                smallSize: 8,
+                child: const Icon(Icons.filter_list_rounded),
+              ),
             ),
             tooltip: 'Filter',
             onPressed: () => showDisposalFilterSheet(context, ref),

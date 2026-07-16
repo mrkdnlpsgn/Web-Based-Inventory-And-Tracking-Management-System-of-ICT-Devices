@@ -6,6 +6,7 @@ import MainLayout from '../../components/layout/MainLayout'
 import { getAssets } from '../../services/assetService'
 import { getAssetHistory } from '../../services/assetHistoryService'
 import { getUsers } from '../../services/userService'
+import { getRecommendationSummary } from '../../services/aiRecommendationService'
 
 // ── Count-up hook ─────────────────────────────────────────────────────────────
 function useCountUp(target, active) {
@@ -29,6 +30,28 @@ function useCountUp(target, active) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [target, active])
   return value
+}
+
+// ── Animated 0→1 progress (for the lifecycle ring's sweep-in) ─────────────────
+function useAnimatedProgress(duration, active) {
+  const [progress, setProgress] = useState(0)
+  const rafRef = useRef(null)
+  useEffect(() => {
+    cancelAnimationFrame(rafRef.current)
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!active || reduced) { setProgress(1); return }
+    setProgress(0)
+    const start = performance.now()
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setProgress(eased)
+      if (p < 1) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [active, duration])
+  return progress
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -76,14 +99,23 @@ const CONDITION_CFG = {
   UNSERVICEABLE: { bar: 'bg-red-500',     text: 'text-red-400',     dot: 'bg-red-400',     label: 'Unserviceable' },
 }
 
+const RECOMMENDATION_ORDER = ['BUDGET_PRIORITY', 'REVIEW_FOR_DISPOSAL', 'REPAIR', 'MONITOR', 'MAINTAIN']
+const RECOMMENDATION_CFG = {
+  BUDGET_PRIORITY:     { dot: 'bg-red-400',     label: 'Budget Priority' },
+  REVIEW_FOR_DISPOSAL: { dot: 'bg-orange-400',  label: 'Review for Disposal' },
+  REPAIR:              { dot: 'bg-amber-400',   label: 'Repair' },
+  MONITOR:             { dot: 'bg-blue-400',    label: 'Monitor' },
+  MAINTAIN:            { dot: 'bg-emerald-400', label: 'Maintain' },
+}
+
 const LIFECYCLE_ORDER = ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'UNDER_MAINTENANCE', 'DISPOSED', 'ARCHIVED']
 const LIFECYCLE_CFG = {
-  REGISTERED:       { bar: 'bg-blue-500',    dot: 'bg-blue-400',    label: 'Registered' },
-  ASSIGNED:         { bar: 'bg-emerald-500', dot: 'bg-emerald-400', label: 'Assigned' },
-  TRANSFERRED:      { bar: 'bg-orange-500',  dot: 'bg-orange-400',  label: 'Transferred' },
-  UNDER_MAINTENANCE:{ bar: 'bg-amber-500',   dot: 'bg-amber-400',   label: 'Under Maintenance' },
-  DISPOSED:         { bar: 'bg-red-500',     dot: 'bg-red-400',     label: 'Disposed' },
-  ARCHIVED:         { bar: 'bg-zinc-500',    dot: 'bg-zinc-400',    label: 'Archived' },
+  REGISTERED:       { bar: 'bg-blue-500',    dot: 'bg-blue-400',    label: 'Registered',        hex: '#3b82f6' },
+  ASSIGNED:         { bar: 'bg-emerald-500', dot: 'bg-emerald-400', label: 'Assigned',          hex: '#10b981' },
+  TRANSFERRED:      { bar: 'bg-orange-500',  dot: 'bg-orange-400',  label: 'Transferred',       hex: '#f97316' },
+  UNDER_MAINTENANCE:{ bar: 'bg-amber-500',   dot: 'bg-amber-400',   label: 'Under Maintenance', hex: '#f59e0b' },
+  DISPOSED:         { bar: 'bg-red-500',     dot: 'bg-red-400',     label: 'Disposed',          hex: '#ef4444' },
+  ARCHIVED:         { bar: 'bg-zinc-500',    dot: 'bg-zinc-400',    label: 'Archived',          hex: '#71717a' },
 }
 
 function computeActivityTrend(history) {
@@ -259,38 +291,87 @@ function ConditionDistribution({ condDist, total, loading }) {
 }
 
 function LifecycleDistribution({ lifecycleDist, total, loading }) {
+  const active = !loading && total > 0
+  const progress = useAnimatedProgress(1100, active)
+  const animatedTotal = useCountUp(total, !loading)
+
+  const R = 64
+  const STROKE = 18
+  const C = 2 * Math.PI * R
+  const GAP = 6
+
+  let cumulative = 0
+  const segments = active
+    ? LIFECYCLE_ORDER.filter((s) => (lifecycleDist[s] || 0) > 0).map((s) => {
+        const count = lifecycleDist[s] || 0
+        const fullLen = (count / total) * C
+        const start = cumulative
+        cumulative += fullLen
+        const drawn = Math.max(fullLen * progress - GAP, 0)
+        return { key: s, color: LIFECYCLE_CFG[s].hex, dasharray: `${drawn} ${C - drawn}`, dashoffset: -start }
+      })
+    : []
+
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
       <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
         <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Lifecycle Status</p>
         {!loading && <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total} total</span>}
       </div>
-      <div className="p-4 space-y-2.5">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Sk className="w-2 h-2 rounded-full flex-shrink-0" />
-                <Sk className="h-3 flex-1" />
-                <Sk className="h-3 w-6" />
-              </div>
-            ))
-          : total === 0
-          ? <p className="text-xs text-slate-400 dark:text-zinc-600 text-center py-6">No assets yet.</p>
-          : LIFECYCLE_ORDER.map((s) => {
-              const count = lifecycleDist[s] || 0
-              if (count === 0) return null
-              const pct = Math.round((count / total) * 100)
-              const cfg = LIFECYCLE_CFG[s]
-              return (
-                <div key={s} className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-                  <span className="text-xs text-slate-500 dark:text-zinc-400 flex-1 truncate">{cfg.label}</span>
-                  <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums">{count}</span>
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-600 tabular-nums w-7 text-right">{pct}%</span>
+      <div className="p-4">
+        {loading ? (
+          <div className="flex flex-col items-center gap-4">
+            <Sk className="w-36 h-36 rounded-full" />
+            <div className="w-full space-y-2.5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Sk className="w-2 h-2 rounded-full flex-shrink-0" />
+                  <Sk className="h-3 flex-1" />
+                  <Sk className="h-3 w-6" />
                 </div>
-              )
-            })
-        }
+              ))}
+            </div>
+          </div>
+        ) : total === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-zinc-600 text-center py-6">No assets yet.</p>
+        ) : (
+          <>
+            <div className="relative w-36 h-36 mx-auto mb-4">
+              <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
+                <circle cx="80" cy="80" r={R} fill="none" strokeWidth={STROKE} className="stroke-slate-100 dark:stroke-zinc-800" />
+                {segments.map((seg) => (
+                  <circle
+                    key={seg.key}
+                    cx="80" cy="80" r={R} fill="none"
+                    strokeWidth={STROKE}
+                    strokeLinecap="round"
+                    style={{ stroke: seg.color, strokeDasharray: seg.dasharray, strokeDashoffset: seg.dashoffset }}
+                  />
+                ))}
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">{animatedTotal}</span>
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-zinc-600 tracking-wide">ASSETS</span>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              {LIFECYCLE_ORDER.map((s) => {
+                const count = lifecycleDist[s] || 0
+                if (count === 0) return null
+                const pct = Math.round((count / total) * 100)
+                const cfg = LIFECYCLE_CFG[s]
+                return (
+                  <div key={s} className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                    <span className="text-xs text-slate-500 dark:text-zinc-400 flex-1 truncate">{cfg.label}</span>
+                    <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums">{count}</span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-600 tabular-nums w-7 text-right">{pct}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -327,7 +408,7 @@ function OfficeDistribution({ offices, total, loading }) {
                   </div>
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-blue-500 transition-all duration-700" style={{ width: `${(count / max) * 100}%` }} />
+                  <div className="h-full w-full rounded-full bg-blue-500 origin-left transition-transform duration-[250ms] ease-out" style={{ transform: `scaleX(${count / max})` }} />
                 </div>
               </div>
             )
@@ -365,12 +446,53 @@ function TopAccountable({ people, loading }) {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-slate-600 dark:text-zinc-300 truncate leading-tight mb-1.5" title={name}>{name}</p>
                 <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-500 transition-all duration-700" style={{ width: `${(count / max) * 100}%` }} />
+                  <div className="h-full w-full rounded-full bg-brand-500 origin-left transition-transform duration-[250ms] ease-out" style={{ transform: `scaleX(${count / max})` }} />
                 </div>
               </div>
               <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums flex-shrink-0">{count}</span>
             </div>
           ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AiRecommendationsSummary({ summary, total, loading }) {
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
+      <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+        <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">AI Lifecycle Insights</p>
+        {!loading && total > 0 && <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total} generated</span>}
+      </div>
+      <div className="p-4 space-y-2.5">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Sk className="w-2 h-2 rounded-full flex-shrink-0" />
+              <Sk className="h-3 flex-1" />
+              <Sk className="h-3 w-6" />
+            </div>
+          ))
+        ) : total === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-zinc-600 text-center py-6">
+            No AI recommendations yet. Open an asset and generate one from its AI Insight tab.
+          </p>
+        ) : (
+          RECOMMENDATION_ORDER.map((r) => {
+            const count = summary[r] || 0
+            if (count === 0) return null
+            const pct = Math.round((count / total) * 100)
+            const cfg = RECOMMENDATION_CFG[r]
+            return (
+              <div key={r} className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                <span className="text-xs text-slate-500 dark:text-zinc-400 flex-1 truncate">{cfg.label}</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums">{count}</span>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-600 tabular-nums w-7 text-right">{pct}%</span>
+              </div>
+            )
+          })
         )}
       </div>
     </div>
@@ -516,7 +638,7 @@ function CategoryBreakdown({ breakdown, total, loading }) {
                   </div>
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-500 transition-all duration-700" style={{ width: `${(count / max) * 100}%` }} />
+                  <div className="h-full w-full rounded-full bg-brand-500 origin-left transition-transform duration-[250ms] ease-out" style={{ transform: `scaleX(${count / max})` }} />
                 </div>
               </div>
             )
@@ -536,6 +658,7 @@ function Dashboard() {
   const [assets, setLocalAssets] = useState([])
   const [history, setHistory]   = useState([])
   const [userCount, setUserCount] = useState(0)
+  const [aiSummary, setAiSummary] = useState([])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -544,7 +667,8 @@ function Dashboard() {
       getAssets().catch(() => null),
       getAssetHistory().catch(() => null),
       getUsers().catch(() => null),
-    ]).then(([assetRes, histRes, userRes]) => {
+      getRecommendationSummary().catch(() => null),
+    ]).then(([assetRes, histRes, userRes, aiRes]) => {
       if (!assetRes && !histRes && !userRes) { setError(true); setLoading(false); return }
       const a = assetRes?.data ?? []
       const h = histRes?.data  ?? []
@@ -553,6 +677,7 @@ function Dashboard() {
       dispatch(setAssets(a))
       setHistory(h)
       setUserCount(u.length)
+      setAiSummary(aiRes?.data ?? [])
       setLoading(false)
     })
   }, [dispatch])
@@ -593,6 +718,10 @@ function Dashboard() {
   }, [assets])
 
   const recentEvents = history.slice(0, 8)
+
+  const aiSummaryMap = {}
+  let aiSummaryTotal = 0
+  aiSummary.forEach(({ recommendation, count }) => { aiSummaryMap[recommendation] = count; aiSummaryTotal += count })
 
   const animAssets  = useCountUp(totalAssets,     !loading)
   const animValue   = useCountUp(Math.round(totalValue), !loading)
@@ -676,6 +805,7 @@ function Dashboard() {
         <ActivityFeed events={recentEvents} loading={loading} />
         <div className="space-y-5">
           <CategoryBreakdown breakdown={categoryBreakdown} total={totalAssets} loading={loading} />
+          <AiRecommendationsSummary summary={aiSummaryMap} total={aiSummaryTotal} loading={loading} />
           <TopAccountable people={topAccountable} loading={loading} />
         </div>
       </div>

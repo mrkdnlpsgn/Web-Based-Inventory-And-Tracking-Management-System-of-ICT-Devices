@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
+import { newIdempotencyKey } from '../../utils/idempotency'
 
 const METHODS   = ['AUCTION', 'DONATION', 'TRANSFER']
 const STATUSES  = ['PENDING', 'APPROVED', 'COMPLETED']
@@ -23,6 +24,7 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [idempotencyKey] = useState(() => newIdempotencyKey())
 
   const set = (key) => (e) => {
     setForm((p) => ({ ...p, [key]: e.target.value }))
@@ -52,7 +54,7 @@ export default function AddDisposalModal({ onClose, onSave, initial = null, asse
         orNumber:           form.orNumber.trim() || null,
         amount:             form.amount !== ''         ? Number(form.amount) : null,
       }
-      await onSave(payload)
+      await onSave(payload, idempotencyKey)
       onClose()
     } catch (err) {
       setErrors({ _global: err.response?.data?.message || 'Failed to save disposal record.' })

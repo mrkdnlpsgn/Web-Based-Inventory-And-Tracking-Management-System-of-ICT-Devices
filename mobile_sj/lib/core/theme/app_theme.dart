@@ -97,6 +97,13 @@ class AppTheme {
   static const Color statusTransferred = Color(0xFF60A5FA);    // blue-400
   static const Color statusRegistered = Color(0xFF6B7280);     // gray
 
+  // Motion tokens — restrained, functional timings (not playful/bouncy) so
+  // transitions read as "responsive UI", matching an enterprise system's tone.
+  static const Duration motionFast = Duration(milliseconds: 160);
+  static const Duration motionMedium = Duration(milliseconds: 260);
+  static const Duration motionSlow = Duration(milliseconds: 420);
+  static const Curve motionCurve = Cubic(0.23, 1, 0.32, 1);
+
   static ThemeData _themeFor(AppColors colors, Brightness brightness) {
     return ThemeData(
       useMaterial3: true,
@@ -174,9 +181,27 @@ class AppTheme {
         tileColor: colors.surface,
         iconColor: colors.textTertiary,
       ),
+      navigationBarTheme: NavigationBarThemeData(
+        iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+              color: states.contains(WidgetState.selected) ? brand : colors.textTertiary,
+              size: 24,
+            )),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+              fontSize: 12,
+              fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w500,
+              color: states.contains(WidgetState.selected) ? brand : colors.textSecondary,
+            )),
+      ),
     );
   }
 
   static ThemeData get dark => _themeFor(AppColors.dark, Brightness.dark);
   static ThemeData get light => _themeFor(AppColors.light, Brightness.light);
+}
+
+/// Reflects the OS-level "Reduce Motion" accessibility setting. Reduced motion
+/// means fewer/gentler animations, not zero — consumers should drop
+/// position-based movement (slides, staggers) while keeping opacity fades.
+extension ReducedMotionX on BuildContext {
+  bool get prefersReducedMotion => MediaQuery.of(this).disableAnimations;
 }

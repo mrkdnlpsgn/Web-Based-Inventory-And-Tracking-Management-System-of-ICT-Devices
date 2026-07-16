@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/staggered_entrance.dart';
 import '../model/report_definition.dart';
 import '../provider/reports_provider.dart';
 
@@ -18,9 +19,12 @@ class ReportsListScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         itemCount: reports.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, i) => _ReportCard(
-          report: reports[i],
-          onTap: () => context.push('/reports/${reports[i].id}'),
+        itemBuilder: (context, i) => StaggeredEntrance(
+          index: i,
+          child: _ReportCard(
+            report: reports[i],
+            onTap: () => context.push('/reports/${reports[i].id}'),
+          ),
         ),
       ),
     );
