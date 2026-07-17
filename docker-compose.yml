@@ -1,0 +1,88 @@
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: sj_gso_db
+    # gso_inventory.sql's tables (and every stored procedure in stored_procedures.sql
+    # that compares strings, e.g. login's username lookup) are explicitly
+    # utf8mb4_general_ci — MySQL 8's own server default is utf8mb4_0900_ai_ci. Without
+    # this, MYSQL_DATABASE gets created with the mismatched default, every stored
+    # procedure that does a string comparison bakes that default in at CREATE TIME,
+    # and every call fails with "Illegal mix of collations" (this bit login specifically:
+    # sp_auth_get_user_for_login's username lookup). Setting the server default before
+    # the DB and procedures are first created avoids the mismatch entirely.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-sj_gso_inventory}
+      MYSQL_USER: ${DB_USER:-app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-apppassword}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./backend_sj/gso_inventory.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./backend_sj/stored_procedures.sql:/docker-entrypoint-initdb.d/02-procedures.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sj_gso_network
+
+  # Spring Boot Backend
+  backend:
+    build:
+      context: ./backend_sj
+      dockerfile: Dockerfile
+    container_name: sj_gso_backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Defense-in-depth alongside the db service's --collation-server setting above:
+      # pins this connection's default collation for any string comparison that isn't
+      # going through a stored procedure (e.g. JPA-generated queries), so it can't drift
+      # from the schema's utf8mb4_general_ci even if the DB's own default ever does.
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${DB_NAME:-sj_gso_inventory}?connectionCollation=utf8mb4_general_ci
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-app}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-apppassword}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${HIBERNATE_DDL:-validate}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILE:-prod}
+      # AI Insight tab (asset lifecycle recommendations) needs a free key from
+      # aistudio.google.com/apikey — set GEMINI_API_KEY in .env to enable it.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    networks:
+      - sj_gso_network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend_sj
+      dockerfile: Dockerfile
+      # api.js reads import.meta.env.VITE_API_BASE_URL, and Vite only bakes
+      # VITE_* vars in at build time — a runtime `environment:` entry here does
+      # nothing (this is a static file server, not a Node process reading env).
+      # Frontend and backend are separate origins (different ports), so this
+      # must be the full absolute URL including /api, not just the host.
+      args:
+        VITE_API_BASE_URL: ${VITE_API_URL:-http://localhost:8080}/api
+    container_name: sj_gso_frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - sj_gso_network
+    restart: unless-stopped
+
+volumes:
+  db_data:
+
+networks:
+  sj_gso_network:
+    driver: bridge

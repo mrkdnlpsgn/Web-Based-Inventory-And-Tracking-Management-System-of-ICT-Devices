@@ -10,6 +10,9 @@ frontend_sj/frontend/dist/
 backend_sj/target/
 backend_sj/bin/
 
+# Uploaded evidence photos — local dev storage, not versioned
+backend_sj/uploads/
+
 # Environment files
 .env
 .env.local
