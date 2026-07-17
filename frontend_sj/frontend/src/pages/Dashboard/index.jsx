@@ -118,20 +118,65 @@ const LIFECYCLE_CFG = {
   ARCHIVED:         { bar: 'bg-zinc-500',    dot: 'bg-zinc-400',    label: 'Archived',          hex: '#71717a' },
 }
 
-function computeActivityTrend(history) {
+const ACTIVITY_RANGES = {
+  day:   { unit: 'hour',  count: 24, title: 'Activity — Today',         periodLabel: 'today' },
+  week:  { unit: 'day',   count: 7,  title: 'Activity — Last 7 Days',   periodLabel: 'this week' },
+  month: { unit: 'day',   count: 30, title: 'Activity — Last 30 Days',  periodLabel: 'this month' },
+  year:  { unit: 'month', count: 12, title: 'Activity — Last 12 Months', periodLabel: 'this year' },
+}
+
+function computeActivityTrend(history, range = 'week') {
   const now = new Date()
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const cfg = ACTIVITY_RANGES[range] || ACTIVITY_RANGES.week
+
+  if (cfg.unit === 'hour') {
+    const buckets = Array.from({ length: cfg.count }, (_, i) => {
+      const d = new Date(now)
+      d.setMinutes(0, 0, 0)
+      d.setHours(d.getHours() - (cfg.count - 1 - i))
+      const hour = d.getHours()
+      const label = hour === 0 ? '12a' : hour === 12 ? '12p' : hour > 12 ? `${hour - 12}p` : `${hour}a`
+      return { key: `${localDateStr(d)}T${String(hour).padStart(2, '0')}`, label, count: 0, isCurrent: i === cfg.count - 1 }
+    })
+    history.forEach((h) => {
+      if (!h.eventDate) return
+      const d = new Date(h.eventDate)
+      const key = `${localDateStr(d)}T${String(d.getHours()).padStart(2, '0')}`
+      const b = buckets.find((x) => x.key === key)
+      if (b) b.count++
+    })
+    return buckets
+  }
+
+  if (cfg.unit === 'month') {
+    const buckets = Array.from({ length: cfg.count }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (cfg.count - 1 - i), 1)
+      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString('en-PH', { month: 'short' }), count: 0, isCurrent: i === cfg.count - 1 }
+    })
+    history.forEach((h) => {
+      if (!h.eventDate) return
+      const d = new Date(h.eventDate)
+      const key = `${d.getFullYear()}-${d.getMonth()}`
+      const b = buckets.find((x) => x.key === key)
+      if (b) b.count++
+    })
+    return buckets
+  }
+
+  // day-unit buckets (week / month ranges)
+  const buckets = Array.from({ length: cfg.count }, (_, i) => {
     const d = new Date(now)
-    d.setDate(d.getDate() - (6 - i))
-    return { date: localDateStr(d), label: d.toLocaleDateString('en-PH', { weekday: 'short' }), count: 0 }
+    d.setDate(d.getDate() - (cfg.count - 1 - i))
+    const label = cfg.count > 7 ? String(d.getDate()) : d.toLocaleDateString('en-PH', { weekday: 'short' })
+    return { key: localDateStr(d), label, count: 0, isCurrent: i === cfg.count - 1 }
   })
   history.forEach((h) => {
     if (!h.eventDate) return
-    const d = h.eventDate.slice(0, 10)
-    const day = days.find((x) => x.date === d)
-    if (day) day.count++
+    const key = h.eventDate.slice(0, 10)
+    const b = buckets.find((x) => x.key === key)
+    if (b) b.count++
   })
-  return days
+  return buckets
 }
 
 function computeOfficeDist(assets) {
@@ -499,18 +544,50 @@ function AiRecommendationsSummary({ summary, total, loading }) {
   )
 }
 
-function ActivityTrend({ trend, loading }) {
+const ACTIVITY_RANGE_OPTIONS = [
+  { key: 'day',   label: 'Day' },
+  { key: 'week',  label: 'Week' },
+  { key: 'month', label: 'Month' },
+  { key: 'year',  label: 'Year' },
+]
+
+function ActivityRangeToggle({ range, onChange }) {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/60 p-0.5">
+      {ACTIVITY_RANGE_OPTIONS.map((opt) => (
+        <button
+          key={opt.key}
+          onClick={() => onChange(opt.key)}
+          className={`px-2.5 py-1 rounded-md text-2xs font-medium transition-all duration-150 ${
+            range === opt.key
+              ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-sm'
+              : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ActivityTrend({ trend, loading, range, onRangeChange }) {
+  const cfg = ACTIVITY_RANGES[range] || ACTIVITY_RANGES.week
   const max = Math.max(...trend.map((d) => d.count), 1)
-  const today = localDateStr(new Date())
-  const total7 = trend.reduce((s, d) => s + d.count, 0)
+  const total = trend.reduce((s, d) => s + d.count, 0)
   const skH = [38, 56, 24, 68, 44, 52, 32]
+  // Thin out labels once bars get dense (24 hourly / 30 daily bars) so text doesn't collide.
+  const labelStride = trend.length > 14 ? Math.ceil(trend.length / 8) : 1
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
-      <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Activity — Last 7 Days</p>
-        {!loading && (
-          <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total7} event{total7 !== 1 ? 's' : ''} this week</span>
-        )}
+      <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">{cfg.title}</p>
+          {!loading && (
+            <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total} event{total !== 1 ? 's' : ''} {cfg.periodLabel}</span>
+          )}
+        </div>
+        <ActivityRangeToggle range={range} onChange={onRangeChange} />
       </div>
       <div className="px-5 py-4">
         {loading ? (
@@ -523,31 +600,30 @@ function ActivityTrend({ trend, loading }) {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="flex items-end gap-2" style={{ height: '80px' }}>
-              {trend.map((day) => {
-                const barH = day.count === 0 ? 3 : Math.max((day.count / max) * 68, 6)
-                const isToday = day.date === today
+            <div className="flex items-end gap-1 gap-x-1" style={{ height: '80px' }}>
+              {trend.map((bucket) => {
+                const barH = bucket.count === 0 ? 3 : Math.max((bucket.count / max) * 68, 6)
                 return (
-                  <div key={day.date} className="flex flex-col items-center justify-end flex-1 h-full">
-                    {day.count > 0 && (
-                      <span className="text-2xs text-slate-400 dark:text-zinc-500 tabular-nums mb-1 leading-none">{day.count}</span>
+                  <div key={bucket.key} className="flex flex-col items-center justify-end flex-1 h-full min-w-0">
+                    {bucket.count > 0 && trend.length <= 14 && (
+                      <span className="text-2xs text-slate-400 dark:text-zinc-500 tabular-nums mb-1 leading-none">{bucket.count}</span>
                     )}
                     <div
-                      className={`w-full rounded-sm transition-all duration-500 ${isToday ? 'bg-brand-500' : 'bg-brand-500/35 hover:bg-brand-500/60'}`}
+                      className={`w-full rounded-sm transition-all duration-500 ${bucket.isCurrent ? 'bg-brand-500' : 'bg-brand-500/35 hover:bg-brand-500/60'}`}
                       style={{ height: `${barH}px` }}
-                      title={`${day.count} event${day.count !== 1 ? 's' : ''} on ${day.date}`}
+                      title={`${bucket.count} event${bucket.count !== 1 ? 's' : ''} — ${bucket.label}`}
                     />
                   </div>
                 )
               })}
             </div>
-            <div className="flex gap-2">
-              {trend.map((day) => (
+            <div className="flex gap-1">
+              {trend.map((bucket, i) => (
                 <span
-                  key={day.date}
-                  className={`flex-1 text-center text-2xs ${day.date === today ? 'text-brand-400 font-semibold' : 'text-slate-400 dark:text-zinc-600'}`}
+                  key={bucket.key}
+                  className={`flex-1 text-center text-2xs truncate ${bucket.isCurrent ? 'text-brand-400 font-semibold' : 'text-slate-400 dark:text-zinc-600'}`}
                 >
-                  {day.label}
+                  {i % labelStride === 0 || bucket.isCurrent ? bucket.label : ''}
                 </span>
               ))}
             </div>
@@ -558,9 +634,9 @@ function ActivityTrend({ trend, loading }) {
   )
 }
 
-function ActivityFeed({ events, loading }) {
+function ActivityFeed({ events, loading, className = '' }) {
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col">
+    <div className={`bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col ${className}`}>
       <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
         <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Recent Activity</p>
         {!loading && events.length > 0 && (
@@ -659,6 +735,7 @@ function Dashboard() {
   const [history, setHistory]   = useState([])
   const [userCount, setUserCount] = useState(0)
   const [aiSummary, setAiSummary] = useState([])
+  const [activityRange, setActivityRange] = useState('week')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -706,7 +783,7 @@ function Dashboard() {
 
   const officeDist     = useMemo(() => computeOfficeDist(assets), [assets])
   const topAccountable = useMemo(() => computeTopAccountable(assets), [assets])
-  const activityTrend  = useMemo(() => computeActivityTrend(history), [history])
+  const activityTrend  = useMemo(() => computeActivityTrend(history, activityRange), [history, activityRange])
 
   const categoryBreakdown = useMemo(() => {
     const map = {}
@@ -732,7 +809,7 @@ function Dashboard() {
 
   const stats = [
     {
-      label: 'ICT Assets', value: animAssets.toLocaleString(),
+      label: 'Assets', value: animAssets.toLocaleString(),
       sub: 'Total registered assets', delta: newThisMonth, href: '/assets',
       icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" /></svg>,
     },
@@ -797,13 +874,13 @@ function Dashboard() {
 
       {/* Activity trend */}
       <div className="mb-5">
-        <ActivityTrend trend={activityTrend} loading={loading} />
+        <ActivityTrend trend={activityTrend} loading={loading} range={activityRange} onRangeChange={setActivityRange} />
       </div>
 
       {/* Activity feed + category breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        <ActivityFeed events={recentEvents} loading={loading} />
-        <div className="space-y-5">
+        <ActivityFeed events={recentEvents} loading={loading} className="h-fit self-start" />
+        <div className="space-y-5 h-fit self-start">
           <CategoryBreakdown breakdown={categoryBreakdown} total={totalAssets} loading={loading} />
           <AiRecommendationsSummary summary={aiSummaryMap} total={aiSummaryTotal} loading={loading} />
           <TopAccountable people={topAccountable} loading={loading} />
