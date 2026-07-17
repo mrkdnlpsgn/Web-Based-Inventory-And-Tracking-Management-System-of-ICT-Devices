@@ -47,6 +47,7 @@ CREATE TABLE users (
     password_reset_otp_hash        VARCHAR(255) NULL COMMENT 'BCrypt-hashed 6-digit OTP, cleared after use/expiry',
     password_reset_otp_expires_at  DATETIME     NULL,
     password_reset_otp_attempts    INT          NOT NULL DEFAULT 0,
+    privacy_acknowledged_at     DATETIME        NULL COMMENT 'Set when the user acknowledges the Data Privacy Notice; NULL means not yet acknowledged',
     created_at                  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_users         PRIMARY KEY (user_id),

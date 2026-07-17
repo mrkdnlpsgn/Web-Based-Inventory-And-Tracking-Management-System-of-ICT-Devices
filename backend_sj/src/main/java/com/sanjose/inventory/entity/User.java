@@ -66,6 +66,11 @@ public class User {
     @Column(name = "must_change_password", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT TRUE")
     private Boolean mustChangePassword = true;
 
+    // Set when the user acknowledges the Data Privacy Notice; null means not yet
+    // acknowledged, which triggers the one-time modal on their next session.
+    @Column(name = "privacy_acknowledged_at")
+    private LocalDateTime privacyAcknowledgedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

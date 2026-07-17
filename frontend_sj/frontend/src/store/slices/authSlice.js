@@ -26,8 +26,14 @@ const authSlice = createSlice({
       state.isAuthenticated = false
       sessionStorage.removeItem('auth-user')
     },
+    // Merges partial fields into the stored user without a full re-login — used
+    // after acknowledging the Data Privacy Notice to update privacyAcknowledgedAt.
+    updateUser: (state, action) => {
+      state.user = { ...state.user, ...action.payload }
+      sessionStorage.setItem('auth-user', JSON.stringify(state.user))
+    },
   },
 })
 
-export const { setCredentials, logout } = authSlice.actions
+export const { setCredentials, logout, updateUser } = authSlice.actions
 export default authSlice.reducer

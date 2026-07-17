@@ -17,9 +17,16 @@ BEGIN
            u.failed_login_attempts AS failedLoginAttempts,
            u.account_locked_until AS accountLockedUntil,
            u.token_version AS tokenVersion,
-           u.must_change_password AS mustChangePassword
+           u.must_change_password AS mustChangePassword,
+           u.privacy_acknowledged_at AS privacyAcknowledgedAt
     FROM users u
     WHERE LOWER(u.username) = LOWER(p_username);
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_acknowledge_privacy $$
+CREATE PROCEDURE sp_auth_acknowledge_privacy(IN p_id INT)
+BEGIN
+    UPDATE users SET privacy_acknowledged_at = NOW() WHERE user_id = p_id;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_auth_login_success $$

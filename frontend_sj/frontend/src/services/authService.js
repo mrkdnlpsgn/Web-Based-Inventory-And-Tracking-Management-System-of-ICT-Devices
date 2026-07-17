@@ -15,3 +15,6 @@ export const requestPasswordReset = (username) =>
 // Step 2: confirm the code and set a new password.
 export const confirmPasswordReset = (username, otp, newPassword) =>
   api.post('/auth/forgot-password/confirm', { username, otp, newPassword })
+
+// Records that the current user has read the Data Privacy Notice.
+export const acknowledgePrivacy = () => api.post('/auth/acknowledge-privacy')

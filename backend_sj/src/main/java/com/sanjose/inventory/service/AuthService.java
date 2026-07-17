@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -51,7 +52,7 @@ public class AuthService {
     private record LoginUserData(
         Long id, String username, String password, String fullName, String role,
         Boolean isActive, Integer failedLoginAttempts, LocalDateTime accountLockedUntil,
-        Integer tokenVersion, Boolean mustChangePassword
+        Integer tokenVersion, Boolean mustChangePassword, LocalDateTime privacyAcknowledgedAt
     ) {}
 
     private record ForgotPasswordUserData(
@@ -93,15 +94,14 @@ public class AuthService {
 
         String token = jwtUtil.generateToken(user.username(), user.tokenVersion() != null ? user.tokenVersion() : 0);
 
-        return Map.of(
-            "token", token,
-            "user", Map.of(
-                "id",       user.id(),
-                "username", user.username(),
-                "fullName", user.fullName(),
-                "role",     user.role()
-            )
-        );
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("id", user.id());
+        userMap.put("username", user.username());
+        userMap.put("fullName", user.fullName());
+        userMap.put("role", user.role());
+        userMap.put("privacyAcknowledgedAt", user.privacyAcknowledgedAt());
+
+        return Map.of("token", token, "user", userMap);
     }
 
     // Step 2 of the forced-password-change flow: re-proves the temp password, then
@@ -136,15 +136,14 @@ public class AuthService {
         int newTokenVersion = (user.tokenVersion() != null ? user.tokenVersion() : 0) + 1;
         String token = jwtUtil.generateToken(user.username(), newTokenVersion);
 
-        return Map.of(
-            "token", token,
-            "user", Map.of(
-                "id",       user.id(),
-                "username", user.username(),
-                "fullName", user.fullName(),
-                "role",     user.role()
-            )
-        );
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("id", user.id());
+        userMap.put("username", user.username());
+        userMap.put("fullName", user.fullName());
+        userMap.put("role", user.role());
+        userMap.put("privacyAcknowledgedAt", user.privacyAcknowledgedAt());
+
+        return Map.of("token", token, "user", userMap);
     }
 
     private LoginUserData lookupForLogin(String identifier) {
@@ -152,6 +151,7 @@ public class AuthService {
             "CALL sp_auth_get_user_for_login(?)",
             (rs, rn) -> {
                 Timestamp lockTs = rs.getTimestamp("accountLockedUntil");
+                Timestamp privacyTs = rs.getTimestamp("privacyAcknowledgedAt");
                 return new LoginUserData(
                     rs.getLong("id"),
                     rs.getString("username"),
@@ -162,7 +162,8 @@ public class AuthService {
                     rs.getObject("failedLoginAttempts", Integer.class),
                     lockTs != null ? lockTs.toLocalDateTime() : null,
                     rs.getObject("tokenVersion", Integer.class),
-                    rs.getObject("mustChangePassword", Boolean.class)
+                    rs.getObject("mustChangePassword", Boolean.class),
+                    privacyTs != null ? privacyTs.toLocalDateTime() : null
                 );
             },
             identifier);
@@ -263,5 +264,17 @@ public class AuthService {
 
         auditLogService.log("USER_PASSWORD_RESET", "Users", data.id(), "user",
             "Password reset via forgot-password flow: " + username);
+    }
+
+    // Records that the currently-authenticated user has read the Data Privacy Notice.
+    // Identity comes from the JWT-backed SecurityContext, not a request body — no
+    // separate credential check needed since the caller already holds a valid session.
+    @Transactional
+    public LocalDateTime acknowledgePrivacy(String username) {
+        LoginUserData user = lookupForLogin(username);
+        if (user == null) throw new BadCredentialsException("Invalid credentials");
+
+        jdbcTemplate.update("CALL sp_auth_acknowledge_privacy(?)", user.id());
+        return LocalDateTime.now();
     }
 }

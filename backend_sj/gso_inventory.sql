@@ -1347,6 +1347,7 @@ CREATE TABLE `users` (
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `failed_login_attempts` int(11) NOT NULL DEFAULT 0,
   `account_locked_until` datetime DEFAULT NULL,
+  `privacy_acknowledged_at` datetime DEFAULT NULL COMMENT 'Set when the user acknowledges the Data Privacy Notice; NULL means not yet acknowledged',
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

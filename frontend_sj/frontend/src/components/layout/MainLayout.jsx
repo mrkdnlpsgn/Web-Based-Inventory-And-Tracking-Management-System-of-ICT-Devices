@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import IdleWarningModal from '../common/IdleWarningModal'
 import OnboardingModal, { useOnboarding } from '../common/OnboardingModal'
+import PrivacyAcknowledgmentModal from '../common/PrivacyAcknowledgmentModal'
 import { useIdleTimeout } from '../../hooks/useIdleTimeout'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -24,8 +25,16 @@ function MainLayout({ children }) {
     return next
   })
   const [showWarning, setShowWarning]  = useState(false)
+  const [ackLoading, setAckLoading]    = useState(false)
   const { pathname } = useLocation()
-  const { signOut } = useAuth()
+  const { signOut, user, acknowledgePrivacy } = useAuth()
+
+  const showPrivacyModal = !!user && !user.privacyAcknowledgedAt
+
+  const handleAcknowledgePrivacy = async () => {
+    setAckLoading(true)
+    try { await acknowledgePrivacy() } finally { setAckLoading(false) }
+  }
 
   const handleWarn = useCallback(() => setShowWarning(true),  [])
   const handleIdle = useCallback(() => { setShowWarning(false); signOut() }, [signOut])
@@ -69,7 +78,9 @@ function MainLayout({ children }) {
         <IdleWarningModal onStay={handleStay} onLogout={handleLogoutNow} />
       )}
 
-      {showOnboarding && (
+      {showPrivacyModal ? (
+        <PrivacyAcknowledgmentModal onAcknowledge={handleAcknowledgePrivacy} loading={ackLoading} />
+      ) : showOnboarding && (
         <OnboardingModal onDismiss={dismissOnboarding} />
       )}
     </div>

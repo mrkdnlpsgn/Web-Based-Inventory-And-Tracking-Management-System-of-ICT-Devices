@@ -1,8 +1,8 @@
 import { useCallback } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { setCredentials, logout } from '../store/slices/authSlice'
-import { login as loginApi, logout as logoutApi, forceChangePassword as forceChangePasswordApi } from '../services/authService'
+import { setCredentials, logout, updateUser } from '../store/slices/authSlice'
+import { login as loginApi, logout as logoutApi, forceChangePassword as forceChangePasswordApi, acknowledgePrivacy as acknowledgePrivacyApi } from '../services/authService'
 
 export function useAuth() {
   const dispatch  = useDispatch()
@@ -30,5 +30,10 @@ export function useAuth() {
     navigate('/login', { replace: true })
   }, [dispatch, navigate])
 
-  return { user, isAuthenticated, login, completeForcedPasswordChange, signOut }
+  const acknowledgePrivacy = useCallback(async () => {
+    const { data } = await acknowledgePrivacyApi()
+    dispatch(updateUser({ privacyAcknowledgedAt: data.privacyAcknowledgedAt }))
+  }, [dispatch])
+
+  return { user, isAuthenticated, login, completeForcedPasswordChange, signOut, acknowledgePrivacy }
 }

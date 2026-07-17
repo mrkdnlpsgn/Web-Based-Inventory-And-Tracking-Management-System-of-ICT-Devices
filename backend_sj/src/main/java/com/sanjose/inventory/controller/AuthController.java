@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
@@ -96,5 +97,12 @@ public class AuthController {
         if (principal == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(Map.of("username", principal.getUsername(),
                                         "authorities", principal.getAuthorities()));
+    }
+
+    @PostMapping("/acknowledge-privacy")
+    public ResponseEntity<Map<String, Object>> acknowledgePrivacy(@AuthenticationPrincipal UserDetails principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        LocalDateTime ack = authService.acknowledgePrivacy(principal.getUsername());
+        return ResponseEntity.ok(Map.of("privacyAcknowledgedAt", ack));
     }
 }

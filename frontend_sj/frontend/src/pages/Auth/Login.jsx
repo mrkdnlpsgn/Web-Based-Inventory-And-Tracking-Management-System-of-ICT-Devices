@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../context/ThemeContext'
 import Input from '../../components/common/Input'
@@ -127,7 +127,11 @@ function Login() {
         </div>
 
         {/* Bottom */}
-        <p className="text-xs text-center text-slate-500 dark:text-zinc-400">© {new Date().getFullYear()} San Jose Municipal Hall</p>
+        <p className="text-xs text-center text-slate-500 dark:text-zinc-400">
+          © {new Date().getFullYear()} San Jose Municipal Hall
+          {' · '}
+          <Link to="/privacy" className="hover:text-brand-500 dark:hover:text-brand-400 transition-colors duration-150">Privacy Notice</Link>
+        </p>
       </div>
 
       {/* Right panel — form */}
