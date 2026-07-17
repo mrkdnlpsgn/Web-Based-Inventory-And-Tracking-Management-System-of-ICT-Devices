@@ -89,37 +89,26 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                // Container healthcheck (Docker HEALTHCHECK hits this with no auth)
+                .requestMatchers("/actuator/health").permitAll()
+                // Uploaded evidence photos: served as plain static files, not sensitive
+                .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                // Accounts are the one thing ADMIN keeps exclusively — everything else below
+                // is open to any authenticated user (ADMIN or STAFF).
                 // Users: GET + own password change for any authenticated user; all else ADMIN only
                 .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/**").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/api/users/me/password").authenticated()
                 .requestMatchers("/api/users/**").hasRole("ADMIN")
-                // Audit logs: ADMIN only
-                .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
-                // Assets: read for all authenticated, mutations ADMIN only
-                .requestMatchers(HttpMethod.GET, "/api/assets", "/api/assets/**").authenticated()
-                .requestMatchers(HttpMethod.POST,   "/api/assets", "/api/assets/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT,    "/api/assets/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/assets/**").hasRole("ADMIN")
-                // Offices, Categories: read for authenticated, mutations ADMIN only
-                .requestMatchers(HttpMethod.GET, "/api/offices", "/api/offices/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/offices").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/offices/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/offices/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/categories", "/api/categories/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/categories").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/categories/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/categories/**").hasRole("ADMIN")
-                // Maintenance, Disposal: read for authenticated, mutations ADMIN only
-                .requestMatchers(HttpMethod.GET, "/api/maintenance/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/maintenance").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/maintenance/*/summary").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/maintenance/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/maintenance/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/disposal/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/disposal").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/disposal/*/justification").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/disposal/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/disposal/**").hasRole("ADMIN")
+                // Audit logs: any authenticated user
+                .requestMatchers("/api/audit-logs/**").authenticated()
+                // Assets: any authenticated user, including mutations
+                .requestMatchers("/api/assets/**", "/api/assets").authenticated()
+                // Offices, Categories: any authenticated user, including mutations
+                .requestMatchers("/api/offices/**", "/api/offices").authenticated()
+                .requestMatchers("/api/categories/**", "/api/categories").authenticated()
+                // Maintenance, Disposal: any authenticated user, including mutations
+                .requestMatchers("/api/maintenance/**", "/api/maintenance").authenticated()
+                .requestMatchers("/api/disposal/**", "/api/disposal").authenticated()
                 // Asset history: all authenticated
                 .requestMatchers("/api/asset-history/**").authenticated()
                 // All other endpoints: any authenticated user
