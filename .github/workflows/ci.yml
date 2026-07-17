@@ -59,12 +59,17 @@ jobs:
           sed -i 's/\r$//' mvnw
           chmod +x mvnw
 
+      # Using SPRING_DATASOURCE_* (same vars docker-compose.yml already relies on)
+      # instead of the app's custom DB_URL/${DB_URL:default} placeholder — these
+      # bind directly to spring.datasource.* via Spring Boot's relaxed env
+      # binding, no indirection through application.properties' nested
+      # placeholder resolution to go wrong.
       - name: Build and test
         working-directory: backend_sj
         env:
-          DB_URL: jdbc:mysql://127.0.0.1:3306/sj_gso_inventory?connectionCollation=utf8mb4_general_ci
-          DB_USERNAME: root
-          DB_PASSWORD: root
+          SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/sj_gso_inventory?connectionCollation=utf8mb4_general_ci
+          SPRING_DATASOURCE_USERNAME: root
+          SPRING_DATASOURCE_PASSWORD: root
         run: ./mvnw -B clean verify
 
   frontend:
