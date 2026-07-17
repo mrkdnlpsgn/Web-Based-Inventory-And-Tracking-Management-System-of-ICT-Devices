@@ -577,8 +577,14 @@ function MyAccountTab({ user }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-const TABS = [
+// Account management stays ADMIN-only; audit logs and the user's own profile are
+// available to everyone.
+const TABS_ADMIN = [
   { id: 'accounts',   label: 'Accounts' },
+  { id: 'audit-logs', label: 'Audit Logs' },
+  { id: 'my-account', label: 'My Account' },
+]
+const TABS_STAFF = [
   { id: 'audit-logs', label: 'Audit Logs' },
   { id: 'my-account', label: 'My Account' },
 ]
@@ -588,9 +594,12 @@ function Accounts() {
   const location  = useLocation()
   const user      = useSelector((s) => s.auth.user)
   const isAdmin   = user?.role === 'ADMIN'
-  const activeTab = location.pathname === '/audit-logs' ? 'audit-logs'
+  const tabs      = isAdmin ? TABS_ADMIN : TABS_STAFF
+
+  const routeTab  = location.pathname === '/audit-logs' ? 'audit-logs'
                   : location.pathname === '/my-account' ? 'my-account'
                   : 'accounts'
+  const activeTab = (!isAdmin && routeTab === 'accounts') ? 'audit-logs' : routeTab
 
   const switchTab = (id) => {
     if (id === 'audit-logs')       navigate('/audit-logs',  { replace: true })
@@ -598,19 +607,11 @@ function Accounts() {
     else                           navigate('/accounts',    { replace: true })
   }
 
-  if (!isAdmin) {
-    return (
-      <MainLayout>
-        <MyAccountTab user={user} />
-      </MainLayout>
-    )
-  }
-
   return (
     <MainLayout>
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-5 border-b border-slate-200 dark:border-zinc-800 overflow-x-auto">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => switchTab(tab.id)}
@@ -625,7 +626,7 @@ function Accounts() {
         ))}
       </div>
 
-      {activeTab === 'accounts'   && <AccountsTab />}
+      {activeTab === 'accounts'   && isAdmin && <AccountsTab />}
       {activeTab === 'audit-logs' && <AuditLogsTab />}
       {activeTab === 'my-account' && <MyAccountTab user={user} />}
     </MainLayout>

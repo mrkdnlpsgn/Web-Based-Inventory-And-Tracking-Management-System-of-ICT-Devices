@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
-import { getOffices } from '../../services/officeService'
 import { newIdempotencyKey } from '../../utils/idempotency'
 import { PASSWORD_REQUIREMENTS, isPasswordComplex } from '../../utils/passwordPolicy'
 
@@ -10,7 +9,7 @@ const ROLES = [
   { value: 'STAFF', label: 'ICT Officer / Staff' },
 ]
 
-const EMPTY = { username: '', email: '', fullName: '', password: '', confirmPassword: '', generatePassword: false, role: 'STAFF', officeId: '', isActive: true }
+const EMPTY = { username: '', email: '', fullName: '', password: '', confirmPassword: '', generatePassword: false, role: 'STAFF', isActive: true }
 
 function Field({ label, required, error, children }) {
   return (
@@ -65,19 +64,13 @@ function UserModal({ onClose, onSave, initial = null }) {
           password: '',
           confirmPassword: '',
           role: initial.role || 'STAFF',
-          officeId: initial.officeId ? String(initial.officeId) : '',
           isActive: initial.isActive !== undefined ? initial.isActive : true,
         }
       : EMPTY
   )
   const [errors, setErrors]   = useState({})
   const [saving, setSaving]   = useState(false)
-  const [offices, setOffices] = useState([])
   const [idempotencyKey] = useState(() => newIdempotencyKey())
-
-  useEffect(() => {
-    getOffices().then(({ data }) => setOffices(data)).catch(() => {})
-  }, [])
 
   const set = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
@@ -125,8 +118,6 @@ function UserModal({ onClose, onSave, initial = null }) {
       delete payload.confirmPassword
       if (!isEditing && payload.generatePassword) delete payload.password
       if (isEditing && !payload.password) delete payload.password
-      if (payload.officeId === '') payload.officeId = null
-      else payload.officeId = Number(payload.officeId)
       await onSave(payload, idempotencyKey)
       onClose()
     } catch (err) {
@@ -250,15 +241,6 @@ function UserModal({ onClose, onSave, initial = null }) {
           <SelectInput value={form.role} onChange={set('role')}>
             {ROLES.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
-            ))}
-          </SelectInput>
-        </Field>
-
-        <Field label="Office" error={errors.officeId}>
-          <SelectInput value={form.officeId} onChange={set('officeId')}>
-            <option value="">— No office assigned —</option>
-            {offices.map((o) => (
-              <option key={o.id} value={String(o.id)}>{o.officeName}</option>
             ))}
           </SelectInput>
         </Field>
