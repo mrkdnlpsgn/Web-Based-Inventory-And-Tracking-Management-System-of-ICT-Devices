@@ -1,9 +1,9 @@
 -- =============================================================
 -- SEED DATA: 2000 demo assets with maintenance / disposal / history
 --
--- This script does NOT hardcode a database name — the three schema
--- files in this repo disagree on it (sj_gso_inventory / gso_inventory /
--- sjgsoinventory). Select your target database on the command line
+-- This script does NOT hardcode a database name — CI/Docker use
+-- sj_gso_inventory while the app's own default (application.properties)
+-- is gso_inventory. Select your target database on the command line
 -- instead, e.g.:
 --   mysql -u app -p sj_gso_inventory < seed_2000_assets.sql
 --   docker exec -i sj_gso_db mysql -u app -papppassword sj_gso_inventory < seed_2000_assets.sql

@@ -1,6 +1,6 @@
 -- =============================================================
 -- GSO Inventory Management System — Stored Procedures
--- Import into gso_eam database AFTER running sjgsoinventory.sql
+-- Import AFTER running gso_inventory.sql
 -- =============================================================
 
 DELIMITER $$
