@@ -17,8 +17,8 @@ class OfflineBanner extends ConsumerWidget {
     return Column(
       children: [
         AnimatedSize(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
+          duration: AppTheme.motionMedium,
+          curve: AppTheme.motionCurve,
           child: isOnline
               ? const SizedBox(width: double.infinity)
               : const Material(

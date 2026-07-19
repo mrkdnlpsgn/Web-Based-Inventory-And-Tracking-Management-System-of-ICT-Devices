@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
@@ -21,6 +21,50 @@ const fmtMoney = (v) =>
 const fmtDateTime = (dt) =>
   dt ? new Date(dt).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// ── Date filtering ────────────────────────────────────────────────────────────
+// With thousands of assets, reports default to unbounded — this lets a user
+// scope a report down to a specific day/week/month/year (or a custom range)
+// before previewing or exporting it.
+const localDateStr = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const DATE_PRESETS = [
+  { key: 'day',   label: 'Today' },
+  { key: 'week',  label: 'This Week' },
+  { key: 'month', label: 'This Month' },
+  { key: 'year',  label: 'This Year' },
+]
+
+function presetRange(preset) {
+  const now = new Date()
+  const to = localDateStr(now)
+  if (preset === 'day') return { from: to, to }
+  if (preset === 'week') {
+    const d = new Date(now)
+    d.setDate(d.getDate() - 6)
+    return { from: localDateStr(d), to }
+  }
+  if (preset === 'month') return { from: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), to }
+  if (preset === 'year') return { from: localDateStr(new Date(now.getFullYear(), 0, 1)), to }
+  return { from: '', to: '' }
+}
+
+function applyDateFilter(rows, dateField, from, to) {
+  if (!dateField || (!from && !to)) return rows
+  return rows.filter((r) => {
+    const v = r[dateField]
+    if (!v) return false
+    const d = String(v).slice(0, 10)
+    if (from && d < from) return false
+    if (to && d > to) return false
+    return true
+  })
+}
 
 // RPCPPE physical-count variance: quantity per records vs. quantity per physical count.
 // physicalCount is null until someone has actually counted the asset — don't assume a shortage.
@@ -54,6 +98,7 @@ const REPORTS = [
     async load() {
       return (await getAllAssets()).data
     },
+    dateField: 'acquisitionDate',
     headers: [
       { label: 'Property No.',    display: (r) => <span className="font-mono text-xs">{r.propertyNumber || '—'}</span>,                                   raw: (r) => r.propertyNumber || '' },
       { label: 'Description',     display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.description || '—'}</span>,              raw: (r) => r.description || '' },
@@ -78,7 +123,15 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      const assets = (await getAllAssets()).data
+      return (await getAllAssets()).data
+    },
+    // Aggregation runs after the date filter (see `transform`), on whichever
+    // assets fall inside the selected acquisitionDate range. `aggregated: true`
+    // tells the preview not to show a "(of N raw rows)" count, since row count
+    // here is condition groups, not filtered records.
+    dateField: 'acquisitionDate',
+    aggregated: true,
+    transform(assets) {
       const map = {}
       assets.forEach((a) => {
         const key = a.condition || 'UNKNOWN'
@@ -110,6 +163,7 @@ const REPORTS = [
     async load() {
       return (await getAssetHistory()).data
     },
+    dateField: 'eventDate',
     headers: [
       { label: 'Asset',           display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>,       raw: (r) => r.asset?.description || '' },
       { label: 'Property No.',    display: (r) => <span className="font-mono text-xs">{r.asset?.propertyNumber || '—'}</span>,                             raw: (r) => r.asset?.propertyNumber || '' },
@@ -131,7 +185,10 @@ const REPORTS = [
       </svg>
     ),
     async load() {
-      const assets = (await getAllAssets()).data
+      return (await getAllAssets()).data
+    },
+    dateField: 'acquisitionDate',
+    transform(assets) {
       return assets
         .filter((a) => a.unitValue != null && a.unitValue !== '')
         .sort((a, b) => Number(b.unitValue) - Number(a.unitValue))
@@ -172,6 +229,7 @@ const REPORTS = [
     async load() {
       return (await getAllMaintenance()).data
     },
+    dateField: 'maintenanceDate',
     headers: [
       { label: 'Asset',           display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>,       raw: (r) => r.asset?.description || '' },
       { label: 'Type',            display: (r) => r.maintenanceType || '—',                                                                               raw: (r) => r.maintenanceType || '' },
@@ -180,28 +238,6 @@ const REPORTS = [
       { label: 'Assigned To',     display: (r) => r.assignedTo?.fullName || r.assignedTo?.username || '—',                                                raw: (r) => r.assignedTo?.fullName || r.assignedTo?.username || '' },
       { label: 'Cost',            display: (r) => r.cost != null ? fmtMoney(r.cost) : '—',                                                               raw: (r) => r.cost != null ? Number(r.cost).toFixed(2) : '' },
       { label: 'Date',            display: (r) => fmtDate(r.maintenanceDate),                                                                             raw: (r) => r.maintenanceDate || '' },
-      { label: 'Recorded By',     display: (r) => r.recordedBy?.fullName || r.recordedBy?.username || '—',                                               raw: (r) => r.recordedBy?.fullName || r.recordedBy?.username || '' },
-    ],
-  },
-  {
-    id: 'disposal',
-    title: 'Disposal Ledger',
-    description: 'All disposal records for unserviceable ICT assets.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-      </svg>
-    ),
-    async load() {
-      return (await getAllDisposal()).data
-    },
-    headers: [
-      { label: 'Asset',           display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>,       raw: (r) => r.asset?.description || '' },
-      { label: 'Reason',          display: (r) => r.reason ? <span className="max-w-[180px] truncate block" title={r.reason}>{r.reason}</span> : '—',     raw: (r) => r.reason || '' },
-      { label: 'Method',          display: (r) => r.recommendedMethod || '—',                                                                             raw: (r) => r.recommendedMethod || '' },
-      { label: 'Status',          display: (r) => r.disposalStatus || '—',                                                                               raw: (r) => r.disposalStatus || '' },
-      { label: 'Inspection Date', display: (r) => fmtDate(r.inspectionDate),                                                                             raw: (r) => r.inspectionDate || '' },
-      { label: 'Approved By',     display: (r) => r.approvedBy?.fullName || r.approvedBy?.username || '—',                                               raw: (r) => r.approvedBy?.fullName || r.approvedBy?.username || '' },
       { label: 'Recorded By',     display: (r) => r.recordedBy?.fullName || r.recordedBy?.username || '—',                                               raw: (r) => r.recordedBy?.fullName || r.recordedBy?.username || '' },
     ],
   },
@@ -217,6 +253,7 @@ const REPORTS = [
     async load() {
       return (await getAllAssets()).data
     },
+    dateField: 'acquisitionDate',
     headers: [
       { label: 'Article',             display: (r) => r.category?.categoryName || '—',                                                                    raw: (r) => r.category?.categoryName || '' },
       { label: 'Description',         display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.description || '—'}</span>,          raw: (r) => r.description || '' },
@@ -250,6 +287,7 @@ const REPORTS = [
     async load() {
       return (await getAllDisposal()).data
     },
+    dateField: 'inspectionDate',
     headers: [
       { label: 'Date Acquired',                 display: (r) => fmtDate(r.asset?.acquisitionDate),                                                                raw: (r) => r.asset?.acquisitionDate || '' },
       { label: 'Particulars/Article',           display: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.asset?.description || '—'}</span>, raw: (r) => r.asset?.description || '' },
@@ -336,7 +374,7 @@ function exportPDF(rows, headers, title, certification) {
 <body>
   <div class="header">
     <h1>${esc(title)}</h1>
-    <p>San Jose Municipal Hall &middot; ICT Inventory &amp; Tracking Management System &middot; Generated: ${new Date().toLocaleString('en-PH')} &middot; ${rows.length} record(s)</p>
+    <p>San Jose Municipal Hall &middot; GSO Inventory Management System &middot; Generated: ${new Date().toLocaleString('en-PH')} &middot; ${rows.length} record(s)</p>
   </div>
   <table>
     <thead><tr>${headerCells}</tr></thead>
@@ -365,6 +403,52 @@ function ValuationTotalsRow({ rows }) {
   )
 }
 
+// ── Date range filter ─────────────────────────────────────────────────────────
+const DATE_INPUT_CLASS = 'rounded-md border border-slate-200 dark:border-zinc-700 px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:border-slate-300 dark:hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150 [color-scheme:light] dark:[color-scheme:dark]'
+
+function DateRangeFilter({ from, to, onChange }) {
+  const activePreset = (() => {
+    for (const p of DATE_PRESETS) {
+      const r = presetRange(p.key)
+      if (r.from === from && r.to === to) return p.key
+    }
+    return null
+  })()
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="inline-flex items-center rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/60 p-0.5">
+        {DATE_PRESETS.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => onChange(presetRange(p.key))}
+            className={`px-2.5 py-1 rounded-md text-2xs font-medium transition-all duration-150 ${
+              activePreset === p.key
+                ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-sm'
+                : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <input type="date" value={from} max={to || undefined} onChange={(e) => onChange({ from: e.target.value, to })} className={DATE_INPUT_CLASS} />
+        <span className="text-2xs text-slate-400 dark:text-zinc-600">to</span>
+        <input type="date" value={to} min={from || undefined} onChange={(e) => onChange({ from, to: e.target.value })} className={DATE_INPUT_CLASS} />
+      </div>
+      {(from || to) && (
+        <button
+          onClick={() => onChange({ from: '', to: '' })}
+          className="text-2xs font-medium text-slate-400 dark:text-zinc-500 hover:text-red-400 transition-colors duration-150"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 function Reports() {
   const { show } = useToast()
@@ -372,19 +456,27 @@ function Reports() {
   const [activeId, setActiveId]     = useState(null)
   const [reportData, setReportData] = useState([])
   const [loading, setLoading]       = useState(false)
+  const [dateFrom, setDateFrom]     = useState('')
+  const [dateTo, setDateTo]         = useState('')
   const previewRef = useRef(null)
 
   const activeReport = REPORTS.find((r) => r.id === activeId)
+
+  const handleDateChange = ({ from, to }) => { setDateFrom(from); setDateTo(to) }
 
   const handleGenerate = async (report) => {
     if (activeId === report.id) {
       setActiveId(null)
       setReportData([])
+      setDateFrom('')
+      setDateTo('')
       return
     }
     setLoading(true)
     setActiveId(report.id)
     setReportData([])
+    setDateFrom('')
+    setDateTo('')
     try {
       const data = await report.load()
       setReportData(data)
@@ -397,8 +489,19 @@ function Reports() {
     }
   }
 
+  // Date filter runs on the raw loaded rows first, then any per-report
+  // aggregation (`transform`, e.g. the Condition Report's grouping) runs on
+  // top of that — so filtering a range re-aggregates instead of just hiding rows.
+  const displayRows = useMemo(() => {
+    if (!activeReport) return []
+    const filtered = applyDateFilter(reportData, activeReport.dateField, dateFrom, dateTo)
+    return activeReport.transform ? activeReport.transform(filtered) : filtered
+  }, [reportData, activeReport, dateFrom, dateTo])
+
+  const isDateFiltered = Boolean(dateFrom || dateTo)
+
   const getExportRows = () => {
-    return activeReport?.extraRows ? activeReport.extraRows(reportData) : reportData
+    return activeReport?.extraRows ? activeReport.extraRows(displayRows) : displayRows
   }
 
   return (
@@ -447,7 +550,12 @@ function Reports() {
             <div>
               <p className="text-sm font-semibold text-slate-700 dark:text-zinc-300">{activeReport?.title}</p>
               {!loading && (
-                <p className="text-xs text-slate-400 dark:text-zinc-500 mt-px">{reportData.length} {reportData.length === 1 ? 'record' : 'records'}</p>
+                <p className="text-xs text-slate-400 dark:text-zinc-500 mt-px">
+                  {displayRows.length} {displayRows.length === 1 ? 'record' : 'records'}
+                  {isDateFiltered && !activeReport?.aggregated && reportData.length !== displayRows.length && (
+                    <span className="text-slate-300 dark:text-zinc-600"> (of {reportData.length})</span>
+                  )}
+                </p>
               )}
             </div>
             {!loading && reportData.length > 0 && (
@@ -468,6 +576,12 @@ function Reports() {
             )}
           </div>
 
+          {!loading && reportData.length > 0 && activeReport?.dateField && (
+            <div className="px-5 py-3 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-800/20">
+              <DateRangeFilter from={dateFrom} to={dateTo} onChange={handleDateChange} />
+            </div>
+          )}
+
           <div className="p-4">
             {loading ? (
               <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800">
@@ -482,12 +596,16 @@ function Reports() {
                   </tbody>
                 </table>
               </div>
-            ) : reportData.length === 0 ? (
+            ) : displayRows.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14 gap-2 text-zinc-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="text-sm">No data available for this report.</p>
+                <p className="text-sm">
+                  {reportData.length > 0 && isDateFiltered
+                    ? 'No records in the selected date range.'
+                    : 'No data available for this report.'}
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800">
@@ -502,7 +620,7 @@ function Reports() {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-zinc-950 divide-y divide-slate-100 dark:divide-zinc-800/60">
-                    {reportData.map((row, i) => (
+                    {displayRows.map((row, i) => (
                       <tr key={i} className="hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors duration-100">
                         {activeReport.headers.map((h) => (
                           <td key={h.label} className="px-4 py-3 text-slate-600 dark:text-zinc-300 whitespace-nowrap">
@@ -511,7 +629,7 @@ function Reports() {
                         ))}
                       </tr>
                     ))}
-                    {activeId === 'valuation' && <ValuationTotalsRow rows={reportData} />}
+                    {activeId === 'valuation' && <ValuationTotalsRow rows={displayRows} />}
                   </tbody>
                 </table>
               </div>

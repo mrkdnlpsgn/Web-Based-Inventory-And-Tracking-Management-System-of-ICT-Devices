@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
-import { getOffices } from '../../services/officeService'
+import { newIdempotencyKey } from '../../utils/idempotency'
+import { PASSWORD_REQUIREMENTS, isPasswordComplex } from '../../utils/passwordPolicy'
 
 const ROLES = [
   { value: 'ADMIN', label: 'Administrator' },
   { value: 'STAFF', label: 'ICT Officer / Staff' },
 ]
 
-const EMPTY = { username: '', fullName: '', password: '', role: 'STAFF', officeId: '', isActive: true }
+const EMPTY = { username: '', email: '', fullName: '', password: '', confirmPassword: '', generatePassword: false, role: 'STAFF', isActive: true }
 
 function Field({ label, required, error, children }) {
   return (
@@ -58,21 +59,18 @@ function UserModal({ onClose, onSave, initial = null }) {
     isEditing
       ? {
           username: initial.username || '',
+          email: initial.email || '',
           fullName: initial.fullName || '',
           password: '',
+          confirmPassword: '',
           role: initial.role || 'STAFF',
-          officeId: initial.officeId ? String(initial.officeId) : '',
           isActive: initial.isActive !== undefined ? initial.isActive : true,
         }
       : EMPTY
   )
   const [errors, setErrors]   = useState({})
   const [saving, setSaving]   = useState(false)
-  const [offices, setOffices] = useState([])
-
-  useEffect(() => {
-    getOffices().then(({ data }) => setOffices(data)).catch(() => {})
-  }, [])
+  const [idempotencyKey] = useState(() => newIdempotencyKey())
 
   const set = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
@@ -80,11 +78,32 @@ function UserModal({ onClose, onSave, initial = null }) {
     setErrors((p) => { const n = { ...p }; delete n[key]; return n })
   }
 
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+
+  useEffect(() => {
+    if (form.generatePassword && !emailValid) {
+      setForm((p) => ({ ...p, generatePassword: false }))
+    }
+  }, [form.generatePassword, emailValid])
+
   const validate = () => {
     const errs = {}
     if (!form.username.trim()) errs.username = 'Username is required.'
+    if (form.email.trim() && !emailValid)
+      errs.email = 'Enter a valid email address.'
     if (!form.fullName.trim()) errs.fullName = 'Full name is required.'
-    if (!isEditing && !form.password.trim()) errs.password = 'Password is required.'
+    if (!isEditing && form.generatePassword) {
+      if (!form.email.trim() || !emailValid) errs.email = 'A valid email is required to auto-generate and send a password.'
+    } else {
+      if (!isEditing && !form.password.trim()) {
+        errs.password = 'Password is required.'
+      } else if (form.password && !isPasswordComplex(form.password)) {
+        errs.password = 'Password does not meet the requirements below.'
+      }
+      if (form.password && form.password !== form.confirmPassword) {
+        errs.confirmPassword = 'Passwords do not match.'
+      }
+    }
     if (!form.role) errs.role = 'Role is required.'
     return errs
   }
@@ -96,10 +115,10 @@ function UserModal({ onClose, onSave, initial = null }) {
     setSaving(true)
     try {
       const payload = { ...form }
+      delete payload.confirmPassword
+      if (!isEditing && payload.generatePassword) delete payload.password
       if (isEditing && !payload.password) delete payload.password
-      if (payload.officeId === '') payload.officeId = null
-      else payload.officeId = Number(payload.officeId)
-      await onSave(payload)
+      await onSave(payload, idempotencyKey)
       onClose()
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to save account.'
@@ -128,7 +147,21 @@ function UserModal({ onClose, onSave, initial = null }) {
             value={form.username}
             onChange={set('username')}
             error={errors.username}
+            autoComplete="off"
           />
+        </Field>
+
+        <Field label="Email" error={errors.email}>
+          <TextInput
+            type="email"
+            placeholder="e.g. jdelacruz@sanjosebatangas.gov.ph"
+            value={form.email}
+            onChange={set('email')}
+            error={errors.email}
+          />
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">
+            Needed for this user to use "Forgot password" — leave blank if unavailable.
+          </p>
         </Field>
 
         <Field label="Full Name" required error={errors.fullName}>
@@ -140,29 +173,74 @@ function UserModal({ onClose, onSave, initial = null }) {
           />
         </Field>
 
-        <Field label={isEditing ? 'New Password (leave blank to keep)' : 'Password'} required={!isEditing} error={errors.password}>
-          <TextInput
-            type="password"
-            placeholder={isEditing ? 'Leave blank to keep current password' : 'Enter password'}
-            value={form.password}
-            onChange={set('password')}
-            error={errors.password}
-          />
-        </Field>
+        {!isEditing && (
+          <label className={`flex items-start gap-2.5 select-none ${emailValid ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.generatePassword}
+              disabled={!emailValid}
+              onChange={set('generatePassword')}
+            />
+            <span className="text-sm text-slate-600 dark:text-zinc-300">
+              Auto-generate a password and email it to the address above
+              {!emailValid && <span className="block text-xs text-slate-400 dark:text-zinc-500 mt-0.5">Enter a valid email to enable this.</span>}
+            </span>
+          </label>
+        )}
+
+        {form.generatePassword ? (
+          <p className="text-xs text-slate-400 dark:text-zinc-500 bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 rounded-md px-3.5 py-2.5">
+            A temporary password will be generated and emailed to <span className="font-medium">{form.email}</span>. The user should change it after logging in.
+          </p>
+        ) : (
+          <>
+            <Field label={isEditing ? 'New Password (leave blank to keep)' : 'Password'} required={!isEditing} error={errors.password}>
+              <TextInput
+                type="password"
+                placeholder={isEditing ? 'Leave blank to keep current password' : 'Enter password'}
+                value={form.password}
+                onChange={set('password')}
+                error={errors.password}
+                autoComplete="new-password"
+              />
+              {form.password && (
+                <ul className="mt-1 space-y-0.5">
+                  {PASSWORD_REQUIREMENTS.map(({ key, label, test }) => {
+                    const met = test(form.password)
+                    return (
+                      <li key={key} className={`flex items-center gap-1.5 text-xs transition-colors ${met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-zinc-500'}`}>
+                        {met
+                          ? <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                          : <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                        }
+                        {label}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </Field>
+
+            {form.password && (
+              <Field label="Confirm Password" required={!isEditing} error={errors.confirmPassword}>
+                <TextInput
+                  type="password"
+                  placeholder="Re-enter password"
+                  value={form.confirmPassword}
+                  onChange={set('confirmPassword')}
+                  error={errors.confirmPassword}
+                  autoComplete="new-password"
+                />
+              </Field>
+            )}
+          </>
+        )}
 
         <Field label="Role" required error={errors.role}>
           <SelectInput value={form.role} onChange={set('role')}>
             {ROLES.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
-            ))}
-          </SelectInput>
-        </Field>
-
-        <Field label="Office" error={errors.officeId}>
-          <SelectInput value={form.officeId} onChange={set('officeId')}>
-            <option value="">— No office assigned —</option>
-            {offices.map((o) => (
-              <option key={o.id} value={String(o.id)}>{o.officeName}</option>
             ))}
           </SelectInput>
         </Field>

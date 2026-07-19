@@ -12,6 +12,7 @@ import UserModal from './UserModal'
 import ResetPasswordModal from './ResetPasswordModal'
 import { getUsers, createUser, updateUser, deleteUser, changePassword, resetPassword } from '../../services/userService'
 import { getAuditLogs } from '../../services/auditLogService'
+import { PASSWORD_REQUIREMENTS, isPasswordComplex } from '../../utils/passwordPolicy'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDateTime(dt) {
@@ -64,10 +65,13 @@ function AccountsTab() {
 
   useEffect(() => { fetchUsers(debouncedSearch) }, [debouncedSearch, fetchUsers])
 
-  const handleCreate = async (form) => {
-    const { data } = await createUser(form)
+  const handleCreate = async (form, idempotencyKey) => {
+    const { data } = await createUser(form, idempotencyKey)
     setUsers((prev) => [...prev, data])
-    toast.show(`Account for ${data.fullName || data.username} created.`, 'success')
+    const message = form.generatePassword
+      ? `Account for ${data.fullName || data.username} created — credentials emailed to ${data.email}.`
+      : `Account for ${data.fullName || data.username} created.`
+    toast.show(message, 'success')
   }
 
   const handleUpdate = async (form) => {
@@ -154,6 +158,9 @@ function AccountsTab() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName || user.username}</p>
                     <p className="text-xs text-slate-400 dark:text-zinc-500 truncate mt-0.5">@{user.username} · {user.officeName || 'No office'}</p>
+                    <p className={`text-xs truncate mt-0.5 ${user.email ? 'text-slate-400 dark:text-zinc-500' : 'text-amber-500 dark:text-amber-400 italic'}`}>
+                      {user.email || 'No email on file (forgot-password unavailable)'}
+                    </p>
                     <div className="mt-1.5 flex items-center gap-1.5">
                       <Badge variant={user.role === 'ADMIN' ? 'brand' : 'default'}>
                         {user.role === 'ADMIN' ? 'Administrator' : 'Staff'}
@@ -191,7 +198,7 @@ function AccountsTab() {
               <table className="min-w-full text-sm divide-y divide-slate-100 dark:divide-zinc-800">
                 <thead>
                   <tr>
-                    {['Username', 'Full Name', 'Role', 'Office', 'Active', ''].map((h) => (
+                    {['Username', 'Email', 'Full Name', 'Role', 'Office', 'Active', ''].map((h) => (
                       <th key={h} className="px-5 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -206,6 +213,11 @@ function AccountsTab() {
                           </div>
                           <span className="font-mono text-xs text-slate-600 dark:text-zinc-400">@{user.username}</span>
                         </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs">
+                        {user.email
+                          ? <span className="text-slate-500 dark:text-zinc-400">{user.email}</span>
+                          : <span className="text-amber-500 dark:text-amber-400 italic">No email</span>}
                       </td>
                       <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white">{user.fullName || '—'}</td>
                       <td className="px-5 py-3.5">
@@ -434,14 +446,7 @@ function MyAccountTab({ user }) {
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState('')
 
-  const complexity = {
-    length:    newPass.length >= 8 && newPass.length <= 128,
-    uppercase: /[A-Z]/.test(newPass),
-    lowercase: /[a-z]/.test(newPass),
-    digit:     /[0-9]/.test(newPass),
-    special:   /[@$!%*?&_#^-]/.test(newPass),
-  }
-  const complexityMet = Object.values(complexity).every(Boolean)
+  const complexityMet = isPasswordComplex(newPass)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -536,21 +541,18 @@ function MyAccountTab({ user }) {
             </div>
             {newPass && (
               <ul className="mt-1 space-y-0.5">
-                {[
-                  { key: 'length',    label: '8–128 characters' },
-                  { key: 'uppercase', label: 'One uppercase letter (A–Z)' },
-                  { key: 'lowercase', label: 'One lowercase letter (a–z)' },
-                  { key: 'digit',     label: 'One number (0–9)' },
-                  { key: 'special',   label: 'One special character (@$!%*?&_#^-)' },
-                ].map(({ key, label }) => (
-                  <li key={key} className={`flex items-center gap-1.5 text-xs transition-colors ${complexity[key] ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-zinc-500'}`}>
-                    {complexity[key]
-                      ? <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                      : <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-                    }
-                    {label}
-                  </li>
-                ))}
+                {PASSWORD_REQUIREMENTS.map(({ key, label, test }) => {
+                  const met = test(newPass)
+                  return (
+                    <li key={key} className={`flex items-center gap-1.5 text-xs transition-colors ${met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-zinc-500'}`}>
+                      {met
+                        ? <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                        : <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                      }
+                      {label}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -575,8 +577,14 @@ function MyAccountTab({ user }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-const TABS = [
+// Account management stays ADMIN-only; audit logs and the user's own profile are
+// available to everyone.
+const TABS_ADMIN = [
   { id: 'accounts',   label: 'Accounts' },
+  { id: 'audit-logs', label: 'Audit Logs' },
+  { id: 'my-account', label: 'My Account' },
+]
+const TABS_STAFF = [
   { id: 'audit-logs', label: 'Audit Logs' },
   { id: 'my-account', label: 'My Account' },
 ]
@@ -586,9 +594,12 @@ function Accounts() {
   const location  = useLocation()
   const user      = useSelector((s) => s.auth.user)
   const isAdmin   = user?.role === 'ADMIN'
-  const activeTab = location.pathname === '/audit-logs' ? 'audit-logs'
+  const tabs      = isAdmin ? TABS_ADMIN : TABS_STAFF
+
+  const routeTab  = location.pathname === '/audit-logs' ? 'audit-logs'
                   : location.pathname === '/my-account' ? 'my-account'
                   : 'accounts'
+  const activeTab = (!isAdmin && routeTab === 'accounts') ? 'audit-logs' : routeTab
 
   const switchTab = (id) => {
     if (id === 'audit-logs')       navigate('/audit-logs',  { replace: true })
@@ -596,19 +607,11 @@ function Accounts() {
     else                           navigate('/accounts',    { replace: true })
   }
 
-  if (!isAdmin) {
-    return (
-      <MainLayout>
-        <MyAccountTab user={user} />
-      </MainLayout>
-    )
-  }
-
   return (
     <MainLayout>
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-5 border-b border-slate-200 dark:border-zinc-800 overflow-x-auto">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => switchTab(tab.id)}
@@ -623,7 +626,7 @@ function Accounts() {
         ))}
       </div>
 
-      {activeTab === 'accounts'   && <AccountsTab />}
+      {activeTab === 'accounts'   && isAdmin && <AccountsTab />}
       {activeTab === 'audit-logs' && <AuditLogsTab />}
       {activeTab === 'my-account' && <MyAccountTab user={user} />}
     </MainLayout>

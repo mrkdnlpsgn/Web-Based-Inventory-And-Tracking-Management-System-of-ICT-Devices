@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/paginated_list_view.dart';
 import '../../../shared/widgets/app_search_field.dart';
+import '../../../shared/widgets/main_shell.dart';
 import '../../../features/auth/provider/auth_provider.dart';
 import '../../../core/platform.dart';
 import '../widgets/asset_filter_sheet.dart';
@@ -39,10 +40,17 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
         title: const Text('Assets'),
         actions: [
           IconButton(
-            icon: Badge(
-              isLabelVisible: filtersActive,
-              smallSize: 8,
-              child: const Icon(Icons.filter_list_rounded),
+            icon: AnimatedSwitcher(
+              duration: AppTheme.motionFast,
+              switchInCurve: AppTheme.motionCurve,
+              switchOutCurve: AppTheme.motionCurve,
+              transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+              child: Badge(
+                key: ValueKey(filtersActive),
+                isLabelVisible: filtersActive,
+                smallSize: 8,
+                child: const Icon(Icons.filter_list_rounded),
+              ),
             ),
             tooltip: 'Filter',
             onPressed: () => showAssetFilterSheet(context, ref),
@@ -66,18 +74,22 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
         ),
       ),
       floatingActionButton: isAdmin
-          ? FloatingActionButton(
-              backgroundColor: AppTheme.brand,
-              child: const Icon(Icons.add_rounded, color: Colors.white),
-              onPressed: () async {
-                final result = await context.push<bool>('/assets/new');
-                if (result == true) ref.invalidate(assetsPagedProvider(search));
-              },
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: kMainShellBarHeight),
+              child: FloatingActionButton(
+                backgroundColor: AppTheme.brand,
+                child: const Icon(Icons.add_rounded, color: Colors.white),
+                onPressed: () async {
+                  final result = await context.push<bool>('/assets/new');
+                  if (result == true) ref.invalidate(assetsPagedProvider(search));
+                },
+              ),
             )
           : null,
       body: PaginatedListView<AssetModel>(
         state: state,
         emptyMessage: 'No assets found.',
+        extraBottomPadding: context.mainShellBottomInset,
         onLoadMore: () => ref.read(assetsPagedProvider(search).notifier).loadMore(),
         onRefresh: () => ref.read(assetsPagedProvider(search).notifier).refresh(),
         itemBuilder: (context, asset, i) => _AssetCard(

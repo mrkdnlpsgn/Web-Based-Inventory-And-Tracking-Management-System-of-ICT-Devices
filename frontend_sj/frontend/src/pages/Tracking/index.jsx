@@ -83,9 +83,16 @@ function Tracking() {
   const [logEntryEquipment, setLogEntryEquipment] = useState(null)
   const PAGE_SIZE = 8
 
+  // Cleanup runs off LogDrawer's own `animationend` (see handleLogDrawerAnimationEnd
+  // below), not a hand-timed setTimeout — avoids a stale timer clobbering a
+  // newly-opened log if the drawer is reopened before the old close finishes.
   const closeLogDrawer = useCallback(() => {
     setLogDrawerExiting(true)
-    setTimeout(() => { setDetailLog(null); setLogDrawerExiting(false) }, 220)
+  }, [])
+
+  const handleLogDrawerAnimationEnd = useCallback(() => {
+    setDetailLog(null)
+    setLogDrawerExiting(false)
   }, [])
 
   const loadLogs = useCallback(async () => {
@@ -331,6 +338,7 @@ function Tracking() {
           log={detailLog ?? {}}
           exiting={logDrawerExiting}
           onClose={closeLogDrawer}
+          onExitAnimationEnd={handleLogDrawerAnimationEnd}
         />
       )}
 

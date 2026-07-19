@@ -11,6 +11,10 @@ export default defineConfig({
         changeOrigin: true,
         cookieDomainRewrite: 'localhost',
       },
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
     // Security headers served by the Vite dev server.
     // In production these should be set by your reverse proxy / CDN (nginx, Cloudflare, etc.).

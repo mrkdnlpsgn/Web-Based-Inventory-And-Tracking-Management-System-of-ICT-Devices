@@ -21,9 +21,10 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    public String generateToken(String email) {
+    public String generateToken(String email, int tokenVersion) {
         return Jwts.builder()
                 .subject(email)
+                .claim("tv", tokenVersion)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getKey())
@@ -37,6 +38,19 @@ public class JwtUtil {
                 .parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+    }
+
+    // Tokens issued before this claim existed have no "tv" claim — treated as version
+    // 0, which matches the DEFAULT 0 on the token_version column, so pre-existing
+    // sessions aren't force-logged-out by this feature shipping.
+    public int extractTokenVersion(String token) {
+        Object claim = Jwts.parser()
+                .verifyWith(getKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("tv");
+        return claim instanceof Number number ? number.intValue() : 0;
     }
 
     public boolean isValid(String token) {

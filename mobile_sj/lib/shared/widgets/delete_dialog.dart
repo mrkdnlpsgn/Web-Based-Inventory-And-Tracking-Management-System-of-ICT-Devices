@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import '../../core/theme/app_theme.dart';
 
 Future<String?> showDeleteDialog(BuildContext context, {bool requireReason = true}) {
@@ -58,6 +59,7 @@ class _DeleteDialogState extends State<_DeleteDialog> {
         TextButton(
           onPressed: () {
             if (widget.requireReason && _ctrl.text.trim().isEmpty) return;
+            HapticFeedback.mediumImpact();
             Navigator.pop(context, widget.requireReason ? _ctrl.text.trim() : 'deleted');
           },
           child: const Text('Delete', style: TextStyle(color: Colors.red)),

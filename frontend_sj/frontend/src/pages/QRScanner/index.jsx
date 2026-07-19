@@ -62,7 +62,7 @@ function printAssetQR(asset) {
     <p class="sub">${esc(asset.category?.categoryName || '')}</p>
     <p class="sub">${esc(asset.office?.officeName || '')}${asset.location ? ' · ' + esc(asset.location) : ''}</p>
     <span class="badge">${esc(asset.propertyNumber)}</span>
-    <p class="org">San Jose Municipal Hall · ICT Inventory System</p>
+    <p class="org">San Jose Municipal Hall · GSO Inventory Management System</p>
   </div>
   <script>window.onload = () => { window.print(); window.onafterprint = () => window.close() }<\/script>
 </body>

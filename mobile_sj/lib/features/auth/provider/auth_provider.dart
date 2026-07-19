@@ -21,6 +21,18 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     state = await AsyncValue.guard(() => _service.login(identifier, password));
   }
 
+  Future<void> completeForceChangePassword(String identifier, String currentPassword, String newPassword) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+        () => _service.forceChangePassword(identifier, currentPassword, newPassword));
+  }
+
+  // Clears a MustChangePasswordRequired (or any) error left in state after the
+  // caller has already handled it, so it isn't mistaken for a real auth failure.
+  void clearError() {
+    if (state.hasError) state = const AsyncData(null);
+  }
+
   Future<void> logout() async {
     await _service.logout();
     state = const AsyncData(null);

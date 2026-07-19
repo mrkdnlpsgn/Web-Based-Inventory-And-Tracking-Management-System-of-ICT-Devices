@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 import { createCategory } from '../../services/categoryService'
+import { newIdempotencyKey } from '../../utils/idempotency'
 
 const PREDEFINED_CATEGORIES = ['Appliances', 'Vehicle', 'Office Supplies']
 const CONDITIONS  = ['SERVICEABLE', 'REPAIRABLE', 'UNSERVICEABLE']
@@ -19,7 +20,7 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
     unitValue:        initial?.unitValue            ?? '',
     officeId:         initial?.office?.id           ? String(initial.office.id) : '',
     accountablePerson: initial?.accountablePerson   || '',
-    physicalCount:    initial?.physicalCount         ?? '',
+    physicalCount:    initial?.physicalCount         ?? 1,
     location:         initial?.location             || '',
     condition:        initial?.condition            || 'SERVICEABLE',
     lifecycleStatus:  initial?.lifecycleStatus      || 'REGISTERED',
@@ -27,6 +28,7 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
   })
   const [errors, setErrors]         = useState({})
   const [saving, setSaving]         = useState(false)
+  const [idempotencyKey] = useState(() => newIdempotencyKey())
 
   // Custom category state
   const [customMode, setCustomMode]       = useState(false)
@@ -64,7 +66,7 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
     setSavingCustom(true)
     setCustomError('')
     try {
-      const { data: newCat } = await createCategory({ categoryName: name, description: '' })
+      const { data: newCat } = await createCategory({ categoryName: name, description: '' }, idempotencyKey)
       if (onCategoryCreated) onCategoryCreated(newCat)
       setForm((p) => ({ ...p, categoryId: String(newCat.id) }))
       setCustomMode(false)
@@ -79,7 +81,6 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
 
   const validate = () => {
     const e = {}
-    if (!form.propertyNumber.trim())   e.propertyNumber   = 'Property number is required.'
     if (!form.description.trim())      e.description      = 'Description is required.'
     if (!form.categoryId)              e.categoryId       = 'Category is required.'
     if (!form.officeId)                e.officeId         = 'Location is required.'
@@ -100,14 +101,14 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
       let resolvedCategoryId = Number(form.categoryId)
       if (form.categoryId.startsWith?.('pre:')) {
         const name = form.categoryId.replace('pre:', '')
-        const { data: newCat } = await createCategory({ categoryName: name, description: '' })
+        const { data: newCat } = await createCategory({ categoryName: name, description: '' }, idempotencyKey)
         if (onCategoryCreated) onCategoryCreated(newCat)
         resolvedCategoryId = newCat.id
       }
 
       const selectedOfficeName = offices.find((o) => String(o.id) === String(form.officeId))?.officeName || ''
       const payload = {
-        propertyNumber:    form.propertyNumber.trim(),
+        propertyNumber:    form.propertyNumber.trim() || null,
         description:       form.description.trim(),
         categoryId:        resolvedCategoryId,
         quantity:          Number(form.quantity) || 1,
@@ -118,10 +119,10 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
         physicalCount:     form.physicalCount !== '' ? Number(form.physicalCount) : null,
         location:          selectedOfficeName,
         condition:         form.condition,
-        lifecycleStatus:   form.lifecycleStatus,
+        ...(isEditing ? { lifecycleStatus: form.lifecycleStatus } : {}),
         remarks:           form.remarks.trim() || null,
       }
-      await onSave(payload)
+      await onSave(payload, idempotencyKey)
       onClose()
     } catch (err) {
       setErrors({ _global: err.response?.data?.message || 'Failed to save asset.' })
@@ -146,9 +147,8 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
         {/* Property No. + Category */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Property Number<span className="text-red-400 ml-0.5">*</span></label>
-            <input className={INPUT_CLASS} placeholder="e.g. COA-2024-001" value={form.propertyNumber} onChange={set('propertyNumber')} />
-            {errors.propertyNumber && <p className="text-xs text-red-400">{errors.propertyNumber}</p>}
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Property Number <span className="text-slate-400 font-normal">(optional)</span></label>
+            <input className={INPUT_CLASS} placeholder="Leave blank to auto-generate" value={form.propertyNumber} onChange={set('propertyNumber')} />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -211,21 +211,21 @@ export default function AddAssetModal({ onClose, onSave, initial = null, categor
         {/* Qty + Physical Count + Acq Date + Unit Value */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Qty (Property Card)</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300 min-h-[2.5rem] flex items-start">Qty (Property Card)</label>
             <input type="number" min="1" className={INPUT_CLASS} value={form.quantity} onChange={set('quantity')} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Qty (Physical Count)<span className="text-red-400 ml-0.5">*</span></label>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300 min-h-[2.5rem] flex items-start">Qty (Physical Count)<span className="text-red-400 ml-0.5">*</span></label>
             <input type="number" min="0" className={INPUT_CLASS} placeholder="0" value={form.physicalCount} onChange={set('physicalCount')} />
             {errors.physicalCount && <p className="text-xs text-red-400">{errors.physicalCount}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Acquisition Date<span className="text-red-400 ml-0.5">*</span></label>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300 min-h-[2.5rem] flex items-start">Acquisition Date<span className="text-red-400 ml-0.5">*</span></label>
             <input type="date" className={INPUT_CLASS} value={form.acquisitionDate} onChange={set('acquisitionDate')} />
             {errors.acquisitionDate && <p className="text-xs text-red-400">{errors.acquisitionDate}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Unit Value (₱)<span className="text-red-400 ml-0.5">*</span></label>
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300 min-h-[2.5rem] flex items-start">Unit Value (₱)<span className="text-red-400 ml-0.5">*</span></label>
             <input type="number" min="0" step="0.01" className={INPUT_CLASS} placeholder="0.00" value={form.unitValue} onChange={set('unitValue')} />
             {errors.unitValue && <p className="text-xs text-red-400">{errors.unitValue}</p>}
           </div>

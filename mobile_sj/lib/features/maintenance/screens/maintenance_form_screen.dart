@@ -7,6 +7,7 @@ import '../../../features/assets/model/asset_model.dart';
 import '../../../shared/widgets/asset_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_exception.dart';
+import '../../../shared/utils/idempotency.dart';
 
 class MaintenanceFormScreen extends ConsumerStatefulWidget {
   final MaintenanceModel? maintenance;
@@ -20,6 +21,7 @@ class MaintenanceFormScreen extends ConsumerStatefulWidget {
 class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
+  final String _idempotencyKey = newIdempotencyKey();
 
   late final TextEditingController _findings;
   late final TextEditingController _actionsTaken;
@@ -75,7 +77,7 @@ class _MaintenanceFormScreenState extends ConsumerState<MaintenanceFormScreen> {
       if (_isEdit) {
         await service.update(widget.maintenance!.id, data);
       } else {
-        await service.create(data);
+        await service.create(data, idempotencyKey: _idempotencyKey);
       }
       ref.invalidate(maintenancePagedProvider(ref.read(maintenanceSearchProvider)));
       if (mounted) Navigator.pop(context, true);

@@ -1,14 +1,7 @@
 import { useState } from 'react'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
-
-const REQUIREMENTS = [
-  { key: 'length',    label: '8–128 characters',                        test: (p) => p.length >= 8 && p.length <= 128 },
-  { key: 'uppercase', label: 'One uppercase letter (A–Z)',               test: (p) => /[A-Z]/.test(p) },
-  { key: 'lowercase', label: 'One lowercase letter (a–z)',               test: (p) => /[a-z]/.test(p) },
-  { key: 'digit',     label: 'One number (0–9)',                        test: (p) => /[0-9]/.test(p) },
-  { key: 'special',   label: 'One special character (@$!%*?&_#^-)',     test: (p) => /[@$!%*?&_#^-]/.test(p) },
-]
+import { PASSWORD_REQUIREMENTS, isPasswordComplex } from '../../utils/passwordPolicy'
 
 function ResetPasswordModal({ user, onClose, onSave }) {
   const [newPassword, setNewPassword] = useState('')
@@ -16,7 +9,7 @@ function ResetPasswordModal({ user, onClose, onSave }) {
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState('')
 
-  const complexityMet = REQUIREMENTS.every((r) => r.test(newPassword))
+  const complexityMet = isPasswordComplex(newPassword)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -60,7 +53,7 @@ function ResetPasswordModal({ user, onClose, onSave }) {
           />
           {newPassword && (
             <ul className="mt-1 space-y-0.5">
-              {REQUIREMENTS.map(({ key, label, test }) => {
+              {PASSWORD_REQUIREMENTS.map(({ key, label, test }) => {
                 const met = test(newPassword)
                 return (
                   <li key={key} className={`flex items-center gap-1.5 text-xs transition-colors ${met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-zinc-500'}`}>

@@ -6,9 +6,11 @@ import '../data/account_service.dart';
 import '../../assets/model/asset_model.dart';
 import '../../../shared/provider/reference_provider.dart';
 import '../../../shared/widgets/delete_dialog.dart';
+import '../widgets/reset_password_dialog.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_exception.dart';
 import '../../auth/provider/auth_provider.dart';
+import '../../../shared/utils/idempotency.dart';
 
 class AccountFormScreen extends ConsumerStatefulWidget {
   final AccountModel? account; // null = create, non-null = edit
@@ -21,8 +23,10 @@ class AccountFormScreen extends ConsumerStatefulWidget {
 class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
+  final String _idempotencyKey = newIdempotencyKey();
 
   late final TextEditingController _username;
+  late final TextEditingController _email;
   late final TextEditingController _fullName;
   late final TextEditingController _password;
 
@@ -37,6 +41,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
     super.initState();
     final a = widget.account;
     _username = TextEditingController(text: a?.username ?? '');
+    _email = TextEditingController(text: a?.email ?? '');
     _fullName = TextEditingController(text: a?.fullName ?? '');
     _password = TextEditingController();
     _role = a?.role ?? 'STAFF';
@@ -47,6 +52,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
   @override
   void dispose() {
     _username.dispose();
+    _email.dispose();
     _fullName.dispose();
     _password.dispose();
     super.dispose();
@@ -58,6 +64,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
     try {
       final data = {
         'username': _username.text.trim(),
+        'email': _email.text.trim(),
         'fullName': _fullName.text.trim(),
         'role': _role,
         'officeId': _officeId,
@@ -69,7 +76,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
       if (_isEdit) {
         await service.update(widget.account!.id, data);
       } else {
-        await service.create(data);
+        await service.create(data, idempotencyKey: _idempotencyKey);
       }
       if (!mounted) return;
       if (usedDefaultPassword) await _showDefaultPasswordDialog();
@@ -152,6 +159,24 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
     }
   }
 
+  Future<void> _resetPassword() async {
+    final newPassword = await showResetPasswordDialog(context, username: widget.account!.username);
+    if (newPassword == null || !mounted) return;
+    setState(() => _loading = true);
+    try {
+      await AccountService().resetPassword(widget.account!.id, newPassword);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password reset successfully.'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _delete() async {
     final confirm = await showDeleteDialog(context, requireReason: false);
     if (confirm == null || !mounted) return;
@@ -182,6 +207,11 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
         title: Text(_isEdit ? 'Edit Account' : 'New Account'),
         actions: [
           if (_isEdit && !isSelf) ...[
+            IconButton(
+              icon: const Icon(Icons.key_rounded),
+              tooltip: 'Reset Password',
+              onPressed: _loading ? null : _resetPassword,
+            ),
             IconButton(
               icon: Icon(_isActive ? Icons.block_rounded : Icons.check_circle_outline_rounded,
                   color: _isActive ? Colors.orange : AppTheme.brand),
@@ -221,6 +251,13 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
                   ),
                 ),
               _field(_username, 'Username', required: true, enabled: !_isEdit),
+              _field(_email, 'Email',
+                  hint: 'Needed for this user to use "Forgot password"',
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v.trim())
+                        ? null : 'Enter a valid email address';
+                  }),
               _field(_fullName, 'Full Name', required: true),
               _field(_password, 'Password',
                   required: !_isEdit,
@@ -268,7 +305,8 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
   }
 
   Widget _field(TextEditingController ctrl, String label,
-      {bool required = false, bool obscure = false, bool enabled = true, String? hint}) {
+      {bool required = false, bool obscure = false, bool enabled = true, String? hint,
+      String? Function(String?)? validator}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
@@ -276,7 +314,8 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
         obscureText: obscure,
         enabled: enabled,
         decoration: InputDecoration(labelText: label, hintText: hint),
-        validator: required ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null : null,
+        validator: validator ??
+            (required ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null : null),
       ),
     );
   }

@@ -19,7 +19,7 @@ function Field({ label, value, mono, full, breakAll }) {
   )
 }
 
-function RecordDrawer({ record, exiting, onClose, onEdit, onQR, onDelete }) {
+function RecordDrawer({ record, exiting, onClose, onExitAnimationEnd, onEdit, onQR, onDelete }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -30,9 +30,13 @@ function RecordDrawer({ record, exiting, onClose, onEdit, onQR, onDelete }) {
 
   return createPortal(
     <>
-      {/* Backdrop — fades in on open, fades out on close */}
+      {/* Blur is static — animating opacity on the same element that carries
+          backdrop-blur forces a resample of the (busy) table behind it every
+          frame. It snaps in instantly; only the tint below fades. */}
+      <div className="fixed inset-0 z-30 backdrop-blur-sm pointer-events-none" aria-hidden="true" />
+      {/* Backdrop tint — fades in on open, fades out on close */}
       <div
-        className={`fixed inset-0 z-30 bg-zinc-950/40 ${exiting ? 'animate-fade-out' : 'animate-fade-in'}`}
+        className={`fixed inset-0 z-30 bg-zinc-950/20 ${exiting ? 'animate-fade-out' : 'animate-fade-in'}`}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -45,6 +49,7 @@ function RecordDrawer({ record, exiting, onClose, onEdit, onQR, onDelete }) {
         className={`fixed inset-y-0 right-0 z-40 w-full sm:w-[440px] bg-white dark:bg-zinc-900 border-l border-slate-200 dark:border-zinc-800 flex flex-col shadow-2xl shadow-black/30 ${
           exiting ? 'animate-slide-out-drawer' : 'animate-slide-in-drawer'
         }`}
+        onAnimationEnd={exiting ? onExitAnimationEnd : undefined}
       >
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-200 dark:border-zinc-800 flex-shrink-0">

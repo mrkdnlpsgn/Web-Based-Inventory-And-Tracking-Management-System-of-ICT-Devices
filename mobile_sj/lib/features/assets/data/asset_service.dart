@@ -40,9 +40,10 @@ class AssetService {
     }
   }
 
-  Future<AssetModel> create(Map<String, dynamic> data) async {
+  Future<AssetModel> create(Map<String, dynamic> data, {String? idempotencyKey}) async {
     try {
-      final res = await _dio.post('/assets', data: data);
+      final res = await _dio.post('/assets', data: data,
+          options: idempotencyKey != null ? Options(headers: {'Idempotency-Key': idempotencyKey}) : null);
       return AssetModel.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw ApiException.from(e);

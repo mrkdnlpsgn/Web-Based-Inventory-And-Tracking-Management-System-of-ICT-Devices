@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,8 @@ import '../../auth/provider/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/skeleton.dart';
+import '../../../shared/widgets/staggered_entrance.dart';
+import '../../../shared/widgets/main_shell.dart';
 import '../../assets/provider/ai_recommendation_provider.dart';
 import '../../audit_log/provider/audit_log_digest_provider.dart';
 import '../provider/dashboard_provider.dart';
@@ -40,29 +43,10 @@ class DashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Logout',
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: context.colors.surface,
-                  title: const Text('Sign Out'),
-                  content: const Text('Are you sure you want to sign out?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: Text('Cancel', style: TextStyle(color: context.colors.textTertiary)),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true) {
-                await ref.read(authProvider.notifier).logout();
-              }
-            },
+            // No confirmation — signing out isn't destructive or irreversible
+            // (logging back in undoes it instantly), so a dialog here would
+            // just be a tap users learn to click through without reading.
+            onPressed: () => ref.read(authProvider.notifier).logout(),
           ),
         ],
       ),
@@ -74,52 +58,8 @@ class DashboardScreen extends ConsumerWidget {
           ref.invalidate(auditLogDigestProvider);
         },
         child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
         children: [
-          if (user != null)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.brand.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.brand.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppTheme.brand.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      user.username.isNotEmpty ? user.username[0].toUpperCase() : '?',
-                      style: const TextStyle(color: AppTheme.brand, fontWeight: FontWeight.w700, fontSize: 18),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(user.username,
-                            style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
-                        const SizedBox(height: 4),
-                        StatusBadge(
-                          label: user.role,
-                          color: user.isAdmin ? AppTheme.brand : AppTheme.statusAssigned,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 24),
-
           _sectionLabel(context, 'OVERVIEW'),
           const SizedBox(height: 12),
           const _DashboardStatsSection(),
@@ -129,67 +69,51 @@ class DashboardScreen extends ConsumerWidget {
           _sectionLabel(context, 'MODULES'),
           const SizedBox(height: 12),
 
-          _NavCard(
-            icon: Icons.inventory_2_outlined,
-            title: 'Assets',
-            subtitle: 'Browse and search ICT assets',
-            color: AppTheme.brand,
-            onTap: () => context.push('/assets'),
+          StaggeredEntrance(
+            index: 0,
+            child: _NavCard(
+              icon: Icons.build_outlined,
+              title: 'Maintenance',
+              subtitle: 'View maintenance ledger records',
+              color: AppTheme.statusMaintenance,
+              onTap: () => context.push('/maintenance'),
+            ),
           ),
           const SizedBox(height: 10),
-          _NavCard(
-            icon: Icons.build_outlined,
-            title: 'Maintenance',
-            subtitle: 'View maintenance ledger records',
-            color: AppTheme.statusMaintenance,
-            onTap: () => context.push('/maintenance'),
+          StaggeredEntrance(
+            index: 1,
+            child: _NavCard(
+              icon: Icons.delete_outline_rounded,
+              title: 'Disposal',
+              subtitle: 'View disposal ledger records',
+              color: AppTheme.statusDisposed,
+              onTap: () => context.push('/disposal'),
+            ),
           ),
           const SizedBox(height: 10),
-          _NavCard(
-            icon: Icons.delete_outline_rounded,
-            title: 'Disposal',
-            subtitle: 'View disposal ledger records',
-            color: AppTheme.statusDisposed,
-            onTap: () => context.push('/disposal'),
-          ),
-          const SizedBox(height: 10),
-          _NavCard(
-            icon: Icons.summarize_outlined,
-            title: 'Reports',
-            subtitle: 'Generate and export inventory reports, including COA RPCPPE/IIRUP',
-            color: AppTheme.brandDark,
-            onTap: () => context.push('/reports'),
-          ),
-          const SizedBox(height: 10),
-          _NavCard(
-            icon: Icons.qr_code_scanner_rounded,
-            title: 'QR Asset Lookup',
-            subtitle: 'Scan or enter a property number to check an asset\'s status',
-            color: AppTheme.statusTransferred,
-            onTap: () => context.push('/qr-scanner'),
+          StaggeredEntrance(
+            index: 2,
+            child: _NavCard(
+              icon: Icons.summarize_outlined,
+              title: 'Reports',
+              subtitle: 'Generate and export inventory reports, including COA RPCPPE/IIRUP',
+              color: AppTheme.brandDark,
+              onTap: () => context.push('/reports'),
+            ),
           ),
           if (isAdmin) ...[
             const SizedBox(height: 10),
-            _NavCard(
-              icon: Icons.manage_accounts_outlined,
-              title: 'Manage Accounts',
-              subtitle: 'Create and manage user accounts',
-              color: AppTheme.statusAssigned,
-              onTap: () => context.push('/accounts'),
+            StaggeredEntrance(
+              index: 3,
+              child: _NavCard(
+                icon: Icons.manage_accounts_outlined,
+                title: 'Manage Accounts',
+                subtitle: 'Create and manage user accounts',
+                color: AppTheme.statusAssigned,
+                onTap: () => context.push('/accounts'),
+              ),
             ),
           ],
-
-          const SizedBox(height: 24),
-
-          _sectionLabel(context, 'PREFERENCES'),
-          const SizedBox(height: 12),
-          _NavCard(
-            icon: Icons.settings_outlined,
-            title: 'Settings',
-            subtitle: 'Theme, text size, and app info',
-            color: AppTheme.statusRegistered,
-            onTap: () => context.push('/settings'),
-          ),
         ],
         ),
       ),
@@ -206,7 +130,7 @@ class DashboardScreen extends ConsumerWidget {
       );
 }
 
-class _NavCard extends StatelessWidget {
+class _NavCard extends StatefulWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -222,37 +146,54 @@ class _NavCard extends StatelessWidget {
   });
 
   @override
+  State<_NavCard> createState() => _NavCardState();
+}
+
+class _NavCardState extends State<_NavCard> {
+  bool _pressed = false;
+
+  void _setPressed(bool v) => setState(() => _pressed = v);
+
+  @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+    return AnimatedScale(
+      scale: _pressed ? 0.98 : 1.0,
+      duration: AppTheme.motionFast,
+      curve: AppTheme.motionCurve,
+      child: Card(
+        child: InkWell(
+          onTap: widget.onTap,
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(widget.icon, color: widget.color, size: 24),
                 ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
-                  ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.title,
+                          style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
+                      const SizedBox(height: 2),
+                      Text(widget.subtitle, style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: context.colors.textSecondary),
-            ],
+                Icon(Icons.chevron_right_rounded, color: context.colors.textSecondary),
+              ],
+            ),
           ),
         ),
       ),
@@ -288,45 +229,88 @@ String _recLabel(String rec) => switch (rec) {
       _ => rec,
     };
 
-class _DashboardStatsSection extends ConsumerWidget {
+class _DashboardStatsSection extends ConsumerStatefulWidget {
   const _DashboardStatsSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DashboardStatsSection> createState() => _DashboardStatsSectionState();
+}
+
+class _DashboardStatsSectionState extends ConsumerState<_DashboardStatsSection> {
+  DashboardStats? _lastStats;
+  bool _hasAnimatedIn = false;
+
+  @override
+  Widget build(BuildContext context) {
     final statsAsync = ref.watch(dashboardStatsProvider);
     final isAdmin = ref.watch(authProvider).value?.isAdmin ?? false;
 
-    return statsAsync.when(
-      loading: () => Shimmer(
-        child: Column(
-          children: [
-            const _OverviewPanelSkeleton(),
-            const SizedBox(height: 10),
-            const _DistributionCardSkeleton(rows: 3),
-            const SizedBox(height: 10),
-            const _DistributionCardSkeleton(rows: 3),
-            const SizedBox(height: 10),
-            const _DistributionCardSkeleton(rows: 2),
-            if (isAdmin) ...[
+    if (statsAsync.hasValue) _lastStats = statsAsync.value;
+    // Keep rendering the last snapshot while a refresh is in flight instead
+    // of dropping back to the skeleton — a pull-to-refresh would otherwise
+    // tear down and recreate every card, replaying the stagger entrance and
+    // restarting the count-up/ring animations from zero on data the user is
+    // already looking at.
+    final stats = _lastStats;
+
+    if (stats == null) {
+      return statsAsync.when(
+        loading: () => Shimmer(
+          child: Column(
+            children: [
+              const _OverviewPanelSkeleton(),
               const SizedBox(height: 10),
-              const _DigestCardSkeleton(),
+              const _RingCardSkeleton(),
+              const SizedBox(height: 10),
+              const _DistributionCardSkeleton(rows: 3),
+              const SizedBox(height: 10),
+              const _DistributionCardSkeleton(rows: 2),
+              if (isAdmin) ...[
+                const SizedBox(height: 10),
+                const _DigestCardSkeleton(),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-      error: (e, _) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text('Failed to load stats: $e', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
-      ),
-      data: (stats) => Column(
-        children: [
+        error: (e, _) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Text('Failed to load stats: $e', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
+        ),
+        data: (_) => const SizedBox.shrink(), // unreachable: _lastStats would already be set
+      );
+    }
+
+    final animate = !_hasAnimatedIn;
+    _hasAnimatedIn = true;
+    Widget maybeStagger(int index, Widget child) =>
+        animate ? StaggeredEntrance(index: index, child: child) : child;
+
+    return Column(
+      children: [
+        maybeStagger(
+          0,
           _OverviewPanel(
             totalAssets: stats.totalAssets,
             totalValue: stats.totalValue,
             underMaintenance: stats.underMaintenance,
             disposed: stats.disposed,
           ),
-          const SizedBox(height: 10),
+        ),
+        const SizedBox(height: 10),
+        maybeStagger(
+          1,
+          _LifecycleRingCard(
+            title: 'Lifecycle Status',
+            total: stats.totalAssets,
+            dist: stats.lifecycleDist,
+            order: _lifecycleOrder,
+            colorOf: (v) => StatusBadge.lifecycle(v).color,
+            labelOf: (v) => StatusBadge.lifecycle(v).label,
+          ),
+        ),
+        const SizedBox(height: 10),
+        maybeStagger(
+          2,
           _DistributionCard(
             title: 'Asset Condition',
             total: stats.totalAssets,
@@ -335,23 +319,14 @@ class _DashboardStatsSection extends ConsumerWidget {
             colorOf: (v) => StatusBadge.condition(v).color,
             labelOf: (v) => StatusBadge.condition(v).label,
           ),
+        ),
+        const SizedBox(height: 10),
+        maybeStagger(3, const _AiRecommendationSummaryCard()),
+        if (isAdmin) ...[
           const SizedBox(height: 10),
-          _DistributionCard(
-            title: 'Lifecycle Status',
-            total: stats.totalAssets,
-            dist: stats.lifecycleDist,
-            order: _lifecycleOrder,
-            colorOf: (v) => StatusBadge.lifecycle(v).color,
-            labelOf: (v) => StatusBadge.lifecycle(v).label,
-          ),
-          const SizedBox(height: 10),
-          const _AiRecommendationSummaryCard(),
-          if (isAdmin) ...[
-            const SizedBox(height: 10),
-            const _AuditLogDigestCard(),
-          ],
+          maybeStagger(4, const _AuditLogDigestCard()),
         ],
-      ),
+      ],
     );
   }
 }
@@ -543,9 +518,14 @@ class _OverviewPanel extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(totalAssets.toString(),
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w800, fontSize: heroFontSize, height: 1)),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: totalAssets.toDouble()),
+                    duration: AppTheme.motionSlow,
+                    curve: AppTheme.motionCurve,
+                    builder: (context, value, _) => Text(value.round().toString(),
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w800, fontSize: heroFontSize, height: 1)),
+                  ),
                   const SizedBox(height: 4),
                   Text('Total Assets', style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
                 ],
@@ -557,11 +537,16 @@ class _OverviewPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_fmtMoney(totalValue),
-                        style: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w700, fontSize: secondaryFontSize, height: 1),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: totalValue),
+                      duration: AppTheme.motionSlow,
+                      curve: AppTheme.motionCurve,
+                      builder: (context, value, _) => Text(_fmtMoney(value),
+                          style: TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.w700, fontSize: secondaryFontSize, height: 1),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
                     const SizedBox(height: 4),
                     Text('Asset Value', style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
                   ],
@@ -575,12 +560,11 @@ class _OverviewPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _MiniStat(
-                    icon: Icons.build_rounded, label: 'Under Maintenance', value: underMaintenance.toString()),
+                child: _MiniStat(icon: Icons.build_rounded, label: 'Under Maintenance', value: underMaintenance),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _MiniStat(icon: Icons.delete_rounded, label: 'Disposed', value: disposed.toString()),
+                child: _MiniStat(icon: Icons.delete_rounded, label: 'Disposed', value: disposed),
               ),
             ],
           ),
@@ -593,7 +577,7 @@ class _OverviewPanel extends StatelessWidget {
 class _MiniStat extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String value;
+  final int value;
 
   const _MiniStat({required this.icon, required this.label, required this.value});
 
@@ -609,7 +593,13 @@ class _MiniStat extends StatelessWidget {
         children: [
           Icon(icon, color: Colors.white.withValues(alpha: 0.85), size: 16),
           const SizedBox(width: 8),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: value.toDouble()),
+            duration: AppTheme.motionSlow,
+            curve: AppTheme.motionCurve,
+            builder: (context, v, _) => Text(v.round().toString(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(label,
@@ -759,14 +749,24 @@ class _DistributionCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 child: SizedBox(
                   height: 8,
-                  child: Row(
-                    children: present.map((k) {
-                      final count = dist[k] ?? 0;
-                      return Expanded(
-                        flex: count,
-                        child: Container(color: colorOf(k)),
-                      );
-                    }).toList(),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: AppTheme.motionSlow,
+                    curve: AppTheme.motionCurve,
+                    builder: (context, progress, child) => FractionallySizedBox(
+                      widthFactor: progress,
+                      alignment: Alignment.centerLeft,
+                      child: child,
+                    ),
+                    child: Row(
+                      children: present.map((k) {
+                        final count = dist[k] ?? 0;
+                        return Expanded(
+                          flex: count,
+                          child: Container(color: colorOf(k)),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -798,6 +798,198 @@ class _DistributionCard extends StatelessWidget {
                 );
               }),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LifecycleRingCard extends StatelessWidget {
+  final String title;
+  final int total;
+  final Map<String, int> dist;
+  final List<String> order;
+  final Color Function(String) colorOf;
+  final String Function(String) labelOf;
+
+  const _LifecycleRingCard({
+    required this.title,
+    required this.total,
+    required this.dist,
+    required this.order,
+    required this.colorOf,
+    required this.labelOf,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final present = order.where((k) => (dist[k] ?? 0) > 0).toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+            if (total == 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Text('No assets registered yet.', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+              )
+            else ...[
+              const SizedBox(height: 16),
+              Center(
+                child: SizedBox(
+                  width: 176,
+                  height: 176,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 1100),
+                    curve: AppTheme.motionCurve,
+                    builder: (context, progress, child) => CustomPaint(
+                      painter: _LifecycleRingPainter(
+                        segments: present.map((k) => _RingSegment(count: dist[k] ?? 0, color: colorOf(k))).toList(),
+                        total: total,
+                        trackColor: context.colors.border,
+                        progress: progress,
+                      ),
+                      child: child,
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('$total',
+                              style: TextStyle(
+                                  color: context.colors.textPrimary, fontWeight: FontWeight.w800, fontSize: 28, height: 1)),
+                          const SizedBox(height: 2),
+                          Text('ASSETS',
+                              style: TextStyle(
+                                  color: context.colors.textTertiary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 14,
+                runSpacing: 8,
+                children: present.map((k) {
+                  final count = dist[k] ?? 0;
+                  final pct = total == 0 ? 0 : (count * 100 / total).round();
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8, height: 8,
+                        decoration: BoxDecoration(color: colorOf(k), shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('${labelOf(k)} · $count ($pct%)',
+                          style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RingSegment {
+  final int count;
+  final Color color;
+  const _RingSegment({required this.count, required this.color});
+}
+
+class _LifecycleRingPainter extends CustomPainter {
+  final List<_RingSegment> segments;
+  final int total;
+  final Color trackColor;
+  final double progress;
+  static const _strokeWidth = 22.0;
+  static const _gapDegrees = 5.0;
+
+  const _LifecycleRingPainter({
+    required this.segments,
+    required this.total,
+    required this.trackColor,
+    this.progress = 1.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius - _strokeWidth / 2);
+
+    final trackPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth
+      ..color = trackColor.withValues(alpha: 0.4);
+    canvas.drawArc(rect, 0, 2 * math.pi, false, trackPaint);
+
+    if (total == 0) return;
+
+    const gapRadians = _gapDegrees * math.pi / 180;
+    // Start angles are computed from the un-animated (full) sweep so every
+    // segment's position is fixed and correct throughout — only each arc's
+    // own length grows with `progress`, so the ring fills in place rather
+    // than sliding segments around as they animate.
+    var startAngle = -math.pi / 2;
+
+    for (final seg in segments) {
+      final fullSweep = (seg.count / total) * 2 * math.pi;
+      final animatedSweep = fullSweep * progress;
+      final drawnSweep = (animatedSweep - gapRadians).clamp(0.0, animatedSweep);
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..color = seg.color;
+      canvas.drawArc(rect, startAngle + gapRadians / 2, drawnSweep, false, paint);
+      startAngle += fullSweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LifecycleRingPainter oldDelegate) => true;
+}
+
+class _RingCardSkeleton extends StatelessWidget {
+  const _RingCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Bone(width: 120, height: 14),
+            SizedBox(height: 16),
+            Center(child: Bone(width: 176, height: 176, borderRadius: BorderRadius.all(Radius.circular(88)))),
+            SizedBox(height: 16),
+            Wrap(
+              spacing: 14,
+              runSpacing: 8,
+              children: [
+                Bone(width: 90, height: 12),
+                Bone(width: 110, height: 12),
+                Bone(width: 80, height: 12),
+              ],
+            ),
           ],
         ),
       ),

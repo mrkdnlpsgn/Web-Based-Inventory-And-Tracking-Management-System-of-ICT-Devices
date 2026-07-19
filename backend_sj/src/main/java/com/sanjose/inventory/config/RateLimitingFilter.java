@@ -18,18 +18,16 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 @Order(1)
 public class RateLimitingFilter extends OncePerRequestFilter {
 
-    // Tier 1 — global: 300 req / 60 s per IP (all endpoints)
-    // Dashboard pages fire several parallel GETs per navigation (asset/user/office lookups,
-    // sidebar audit-log polling, etc.); 100 was tripping on normal browsing, not just abuse.
-    private static final int  GLOBAL_MAX  = 300;
+    // Tier 1 — global: 100 req / 60 s per IP (all endpoints)
+    private static final int  GLOBAL_MAX  = 100;
     private static final long GLOBAL_WIN  = 60_000L;
 
     // Tier 2 — write ops (POST/PUT/DELETE, non-auth): 30 req / 60 s per IP
     private static final int  WRITE_MAX   = 30;
     private static final long WRITE_WIN   = 60_000L;
 
-    // Tier 3 — auth login: 10 attempts / 15 min per IP
-    private static final int  AUTH_MAX    = 10;
+    // Tier 3 — auth login: 5 attempts / 15 min per IP  (stricter than before)
+    private static final int  AUTH_MAX    = 5;
     private static final long AUTH_WIN    = 15 * 60_000L;
 
     private final Map<String, Deque<Long>> globalBucket = new ConcurrentHashMap<>();

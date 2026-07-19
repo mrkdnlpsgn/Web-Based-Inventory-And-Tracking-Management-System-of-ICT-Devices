@@ -7,6 +7,7 @@ import '../../../features/assets/model/asset_model.dart';
 import '../../../shared/widgets/asset_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_exception.dart';
+import '../../../shared/utils/idempotency.dart';
 
 class DisposalFormScreen extends ConsumerStatefulWidget {
   final DisposalModel? disposal;
@@ -20,6 +21,7 @@ class DisposalFormScreen extends ConsumerStatefulWidget {
 class _DisposalFormScreenState extends ConsumerState<DisposalFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
+  final String _idempotencyKey = newIdempotencyKey();
 
   late final TextEditingController _reason;
   late final TextEditingController _inspectionFindings;
@@ -81,7 +83,7 @@ class _DisposalFormScreenState extends ConsumerState<DisposalFormScreen> {
       if (_isEdit) {
         await service.update(widget.disposal!.id, data);
       } else {
-        await service.create(data);
+        await service.create(data, idempotencyKey: _idempotencyKey);
       }
       ref.invalidate(disposalPagedProvider(ref.read(disposalSearchProvider)));
       if (mounted) Navigator.pop(context, true);

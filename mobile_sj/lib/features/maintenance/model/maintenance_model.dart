@@ -26,6 +26,7 @@ class MaintenanceModel {
   final String status;           // COMPLETED | ONGOING | SCHEDULED
   final MaintenanceUserModel recordedBy;
   final String createdAt;
+  final String? updatedAt;
 
   const MaintenanceModel({
     required this.id,
@@ -39,6 +40,7 @@ class MaintenanceModel {
     required this.status,
     required this.recordedBy,
     required this.createdAt,
+    this.updatedAt,
   });
 
   factory MaintenanceModel.fromJson(Map<String, dynamic> json) => MaintenanceModel(
@@ -53,5 +55,6 @@ class MaintenanceModel {
         status: json['status'] as String,
         recordedBy: MaintenanceUserModel.fromJson(json['recordedBy'] as Map<String, dynamic>),
         createdAt: json['createdAt'] as String,
+        updatedAt: json['updatedAt'] as String?,
       );
 }

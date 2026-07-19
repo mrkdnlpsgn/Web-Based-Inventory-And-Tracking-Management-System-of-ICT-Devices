@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../data/auth_service.dart';
 import '../provider/auth_provider.dart';
+import 'force_change_password_screen.dart';
+import '../../../core/router/page_transitions.dart';
 import '../../../core/theme/app_theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -25,12 +29,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref.read(authProvider.notifier).login(
-          _identifierCtrl.text.trim(),
-          _passwordCtrl.text,
-        );
+    final identifier = _identifierCtrl.text.trim();
+    final password = _passwordCtrl.text;
+    await ref.read(authProvider.notifier).login(identifier, password);
     if (!mounted) return;
     final error = ref.read(authProvider).error;
+    if (error is MustChangePasswordRequired) {
+      // Not a real auth failure — clear it so it isn't mistaken for one, then
+      // hand off to the password-change step.
+      ref.read(authProvider.notifier).clearError();
+      await Navigator.of(context).push(fadeThroughRoute(
+        ForceChangePasswordScreen(
+          identifier: identifier,
+          currentPassword: password,
+        ),
+      ));
+      return;
+    }
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -132,7 +147,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Required' : null,
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.push('/forgot-password'),
+                        child: const Text('Forgot password?'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     ElevatedButton(
                       onPressed: isLoading ? null : _submit,
                       child: isLoading

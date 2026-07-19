@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/main_shell.dart';
+import '../../auth/provider/auth_provider.dart';
 import '../provider/settings_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -11,11 +15,12 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    final user = ref.watch(authProvider).value;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
         children: [
           _sectionLabel(context, 'APPEARANCE'),
           const SizedBox(height: 12),
@@ -56,6 +61,60 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _sectionLabel(context, 'ACCOUNT'),
+          const SizedBox(height: 12),
+          if (user != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.brand.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.brand.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppTheme.brand.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      user.username.isNotEmpty ? user.username[0].toUpperCase() : '?',
+                      style: const TextStyle(color: AppTheme.brand, fontWeight: FontWeight.w700, fontSize: 18),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user.username,
+                            style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
+                        const SizedBox(height: 4),
+                        StatusBadge(
+                          label: user.role,
+                          color: user.isAdmin ? AppTheme.brand : AppTheme.statusAssigned,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.lock_reset_rounded, color: AppTheme.brand),
+              title: Text('Change Password', style: TextStyle(color: context.colors.textPrimary)),
+              trailing: Icon(Icons.chevron_right_rounded, color: context.colors.textSecondary),
+              onTap: () => context.push('/settings/change-password'),
             ),
           ),
           const SizedBox(height: 24),

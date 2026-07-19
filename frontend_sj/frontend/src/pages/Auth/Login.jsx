@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../context/ThemeContext'
 import Input from '../../components/common/Input'
 import ForgotPasswordModal from './ForgotPasswordModal'
+import ForceChangePasswordForm from './ForceChangePasswordForm'
 
 const FEATURES = [
   {
@@ -33,7 +34,7 @@ const FEATURES = [
 ]
 
 function Login() {
-  const { login }  = useAuth()
+  const { login, completeForcedPasswordChange } = useAuth()
   const navigate   = useNavigate()
   const { isDark, toggle } = useTheme()
   const [form, setForm]               = useState({ identifier: '', password: '' })
@@ -41,20 +42,30 @@ function Login() {
   const [error, setError]             = useState('')
   const [loading, setLoading]         = useState(false)
   const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [forcedChange, setForcedChange] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await login(form)
-      navigate('/dashboard')
+      const result = await login(form)
+      if (result?.mustChangePassword) {
+        setForcedChange({ identifier: form.identifier, currentPassword: form.password })
+      } else {
+        navigate('/dashboard')
+      }
     } catch (err) {
       const msg = err?.response?.data?.message
       setError(msg || 'Incorrect username or password. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleForcedChangeSubmit = async (payload) => {
+    await completeForcedPasswordChange(payload)
+    navigate('/dashboard')
   }
 
   return (
@@ -116,11 +127,22 @@ function Login() {
         </div>
 
         {/* Bottom */}
-        <p className="text-xs text-center text-slate-500 dark:text-zinc-400">© {new Date().getFullYear()} San Jose Municipal Hall</p>
+        <p className="text-xs text-center text-slate-500 dark:text-zinc-400">
+          © {new Date().getFullYear()} San Jose Municipal Hall
+          {' · '}
+          <Link to="/privacy" className="hover:text-brand-500 dark:hover:text-brand-400 transition-colors duration-150">Privacy Notice</Link>
+        </p>
       </div>
 
       {/* Right panel — form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
+        {forcedChange ? (
+          <ForceChangePasswordForm
+            identifier={forcedChange.identifier}
+            currentPassword={forcedChange.currentPassword}
+            onSubmit={handleForcedChangeSubmit}
+          />
+        ) : (
         <div className="w-full max-w-sm animate-fade-slide">
 
           {/* Mobile brand */}
@@ -238,6 +260,7 @@ function Login() {
             For access issues, contact the ICT Division.
           </p>
         </div>
+        )}
       </div>
 
       {showForgotPassword && (

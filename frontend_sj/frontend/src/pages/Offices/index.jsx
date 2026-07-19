@@ -7,6 +7,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog'
 import Modal from '../../components/common/Modal'
 import { getOffices, createOffice, updateOffice, deleteOffice } from '../../services/officeService'
 import { getUsers } from '../../services/userService'
+import { newIdempotencyKey } from '../../utils/idempotency'
 
 const INPUT_CLASS = 'w-full rounded-md border border-slate-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150'
 
@@ -16,6 +17,7 @@ function OfficeModal({ onClose, onSave, initial = null }) {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [users, setUsers]   = useState([])
+  const [idempotencyKey] = useState(() => newIdempotencyKey())
 
   useEffect(() => {
     getUsers().then(({ data }) => setUsers(data)).catch(() => {})
@@ -35,7 +37,7 @@ function OfficeModal({ onClose, onSave, initial = null }) {
         officeName: form.officeName.trim(),
         headUserId: form.headUserId ? Number(form.headUserId) : null,
       }
-      await onSave(payload)
+      await onSave(payload, idempotencyKey)
       onClose()
     } catch (err) {
       setErrors({ _global: err.response?.data?.message || 'Failed to save.' })
@@ -103,8 +105,8 @@ function Offices() {
 
   useEffect(() => { fetchOffices(debouncedSearch) }, [debouncedSearch, fetchOffices])
 
-  const handleCreate = async (payload) => {
-    const { data } = await createOffice(payload)
+  const handleCreate = async (payload, idempotencyKey) => {
+    const { data } = await createOffice(payload, idempotencyKey)
     setOffices((prev) => [...prev, data])
     toast.show('Office created.', 'success')
   }

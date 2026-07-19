@@ -15,6 +15,7 @@ class DisposalModel {
   final double? amount;
   final MaintenanceUserModel recordedBy;
   final String createdAt;
+  final String? updatedAt;
 
   const DisposalModel({
     required this.id,
@@ -30,6 +31,7 @@ class DisposalModel {
     this.amount,
     required this.recordedBy,
     required this.createdAt,
+    this.updatedAt,
   });
 
   factory DisposalModel.fromJson(Map<String, dynamic> json) => DisposalModel(
@@ -46,5 +48,6 @@ class DisposalModel {
         amount: json['amount'] != null ? (json['amount'] as num).toDouble() : null,
         recordedBy: MaintenanceUserModel.fromJson(json['recordedBy'] as Map<String, dynamic>),
         createdAt: json['createdAt'] as String,
+        updatedAt: json['updatedAt'] as String?,
       );
 }

@@ -5,18 +5,18 @@ import { useTheme } from '../../context/ThemeContext'
 import ConfirmDialog from '../common/ConfirmDialog'
 
 const pageMeta = {
-  '/dashboard':    { title: 'Dashboard',      subtitle: 'Overview of ICT assets and activities' },
-  '/assets':       { title: 'Assets',         subtitle: 'Manage ICT assets' },
-  '/asset-history':{ title: 'Asset History',  subtitle: 'Track asset events' },
-  '/maintenance':  { title: 'Maintenance',    subtitle: 'Maintenance ledger' },
-  '/disposal':     { title: 'Disposal',       subtitle: 'Disposal ledger' },
-  '/offices':      { title: 'Offices',        subtitle: 'Manage offices' },
-  '/categories':   { title: 'Categories',     subtitle: 'Manage categories' },
-  '/reports':      { title: 'Reports',        subtitle: 'Generate and export system reports' },
-  '/qr-scanner':   { title: 'QR Scanner',     subtitle: 'Scan or search equipment by QR code' },
-  '/accounts':     { title: 'Accounts',       subtitle: 'Manage staff and administrator accounts' },
-  '/audit-logs':   { title: 'Audit Logs',     subtitle: 'System-wide activity trail for compliance and review' },
-  '/my-account':   { title: 'My Account',     subtitle: 'Manage your profile and password' },
+  '/dashboard':     'Dashboard',
+  '/assets':        'Assets',
+  '/asset-history': 'Asset History',
+  '/maintenance':   'Maintenance',
+  '/disposal':      'Disposal',
+  '/offices':       'Offices',
+  '/categories':    'Categories',
+  '/reports':       'Reports',
+  '/qr-scanner':    'QR Scanner',
+  '/accounts':      'Accounts',
+  '/audit-logs':    'Audit Logs',
+  '/my-account':    'My Account',
 }
 
 function Header({ onMenuOpen }) {
@@ -25,7 +25,7 @@ function Header({ onMenuOpen }) {
   const { isDark, toggle } = useTheme()
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
-  const meta = pageMeta[pathname] ?? { title: 'ICT Inventory', subtitle: '' }
+  const title = pageMeta[pathname] ?? 'San Jose GSO Inventory Management System'
   const name = user?.fullName ?? user?.username ?? 'Administrator'
   const initials = name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
   const roleLabel = user?.role === 'ADMIN' ? 'System Administrator' : user?.role === 'STAFF' ? 'ICT Staff' : (user?.role ?? 'Staff')
@@ -44,8 +44,7 @@ function Header({ onMenuOpen }) {
       </button>
 
       <div className="flex-1 min-w-0">
-        <h1 className="text-base font-semibold text-slate-900 dark:text-white leading-tight">{meta.title}</h1>
-        <p className="text-xs text-slate-400 dark:text-zinc-500 mt-px">{meta.subtitle}</p>
+        <h1 className="text-base font-semibold text-slate-900 dark:text-white leading-tight">{title}</h1>
       </div>
 
       <div className="flex items-center gap-2">

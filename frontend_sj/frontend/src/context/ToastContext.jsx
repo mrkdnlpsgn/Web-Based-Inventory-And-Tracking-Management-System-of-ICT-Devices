@@ -36,6 +36,7 @@ const STYLES = {
 // ── Single toast item ─────────────────────────────────────────────────────────
 function ToastItem({ toast, onDismiss }) {
   const s = STYLES[toast.type] ?? STYLES.info
+  const visible = toast.phase !== 'entering' && toast.phase !== 'exiting'
 
   return (
     <div
@@ -45,7 +46,8 @@ function ToastItem({ toast, onDismiss }) {
         bg-zinc-900/90 backdrop-blur-md
         shadow-2xl shadow-black/60
         w-[340px] max-w-[calc(100vw-2rem)]
-        ${toast.exiting ? 'animate-toast-out' : 'animate-slide-in-right'}
+        transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)]
+        ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-7'}
         pointer-events-auto
       `}
     >
@@ -77,7 +79,7 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
   const dismiss = useCallback((id) => {
-    setToasts((prev) => prev.map((t) => t.id === id ? { ...t, exiting: true } : t))
+    setToasts((prev) => prev.map((t) => t.id === id ? { ...t, phase: 'exiting' } : t))
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id))
     }, 210)
@@ -87,7 +89,10 @@ export function ToastProvider({ children }) {
     const id       = crypto.randomUUID()
     const duration = options.duration ?? (type === 'error' ? 5000 : type === 'warning' ? 4000 : 3500)
 
-    setToasts((prev) => [...prev, { id, message, type, title: options.title }])
+    setToasts((prev) => [...prev, { id, message, type, title: options.title, phase: 'entering' }])
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      setToasts((prev) => prev.map((t) => t.id === id ? { ...t, phase: 'idle' } : t))
+    }))
     setTimeout(() => dismiss(id), duration)
   }, [dismiss])
 

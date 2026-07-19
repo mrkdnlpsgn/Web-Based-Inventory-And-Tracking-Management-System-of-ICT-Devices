@@ -1,6 +1,6 @@
 -- =============================================================
 -- GSO Inventory Management System — Stored Procedures
--- Import into gso_eam database AFTER running sjgsoinventory.sql
+-- Import AFTER running gso_inventory.sql
 -- =============================================================
 
 DELIMITER $$
@@ -15,9 +15,18 @@ BEGIN
     SELECT u.user_id AS id, u.username, u.password_hash AS password,
            u.full_name AS fullName, u.`role`, u.is_active AS isActive,
            u.failed_login_attempts AS failedLoginAttempts,
-           u.account_locked_until AS accountLockedUntil
+           u.account_locked_until AS accountLockedUntil,
+           u.token_version AS tokenVersion,
+           u.must_change_password AS mustChangePassword,
+           u.privacy_acknowledged_at AS privacyAcknowledgedAt
     FROM users u
     WHERE LOWER(u.username) = LOWER(p_username);
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_acknowledge_privacy $$
+CREATE PROCEDURE sp_auth_acknowledge_privacy(IN p_id INT)
+BEGIN
+    UPDATE users SET privacy_acknowledged_at = NOW() WHERE user_id = p_id;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_auth_login_success $$
@@ -40,12 +49,59 @@ BEGIN
     WHERE user_id = p_user_id;
 END $$
 
-DROP PROCEDURE IF EXISTS sp_auth_get_user_for_forgot_password $$
-CREATE PROCEDURE sp_auth_get_user_for_forgot_password(IN p_username VARCHAR(50))
+-- Step 1 of forgot-password: look up the account + email to decide (in Java) whether
+-- an OTP should be generated and emailed. Caller always returns the same generic HTTP
+-- response regardless of what this returns, to avoid a username-existence oracle.
+DROP PROCEDURE IF EXISTS sp_auth_get_user_for_forgot_password_request $$
+CREATE PROCEDURE sp_auth_get_user_for_forgot_password_request(IN p_username VARCHAR(50))
 BEGIN
-    SELECT user_id AS id, username, is_active AS isActive, last_password_reset_at AS lastPasswordResetAt
+    SELECT user_id AS id, username, email, is_active AS isActive,
+           last_password_reset_at AS lastPasswordResetAt,
+           password_reset_otp_expires_at AS otpExpiresAt
     FROM users
     WHERE LOWER(username) = LOWER(p_username);
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_set_password_reset_otp $$
+CREATE PROCEDURE sp_auth_set_password_reset_otp(
+    IN p_user_id INT, IN p_otp_hash VARCHAR(255), IN p_expires_at DATETIME
+)
+BEGIN
+    UPDATE users
+    SET password_reset_otp_hash = p_otp_hash,
+        password_reset_otp_expires_at = p_expires_at,
+        password_reset_otp_attempts = 0
+    WHERE user_id = p_user_id;
+END $$
+
+-- Step 2 of forgot-password: fetch the pending OTP (if any) to validate in Java.
+DROP PROCEDURE IF EXISTS sp_auth_get_password_reset_otp $$
+CREATE PROCEDURE sp_auth_get_password_reset_otp(IN p_username VARCHAR(50))
+BEGIN
+    SELECT user_id AS id, is_active AS isActive,
+           password_reset_otp_hash AS otpHash,
+           password_reset_otp_expires_at AS otpExpiresAt,
+           password_reset_otp_attempts AS otpAttempts
+    FROM users
+    WHERE LOWER(username) = LOWER(p_username);
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_increment_password_reset_otp_attempts $$
+CREATE PROCEDURE sp_auth_increment_password_reset_otp_attempts(IN p_user_id INT)
+BEGIN
+    UPDATE users
+    SET password_reset_otp_attempts = password_reset_otp_attempts + 1
+    WHERE user_id = p_user_id;
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_clear_password_reset_otp $$
+CREATE PROCEDURE sp_auth_clear_password_reset_otp(IN p_user_id INT)
+BEGIN
+    UPDATE users
+    SET password_reset_otp_hash = NULL,
+        password_reset_otp_expires_at = NULL,
+        password_reset_otp_attempts = 0
+    WHERE user_id = p_user_id;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_auth_forgot_password_reset $$
@@ -55,7 +111,11 @@ BEGIN
     SET password_hash = p_password_hash,
         last_password_reset_at = NOW(),
         failed_login_attempts = 0,
-        account_locked_until = NULL
+        account_locked_until = NULL,
+        password_reset_otp_hash = NULL,
+        password_reset_otp_expires_at = NULL,
+        password_reset_otp_attempts = 0,
+        token_version = token_version + 1
     WHERE user_id = p_user_id;
 END $$
 
@@ -180,7 +240,7 @@ END $$
 DROP PROCEDURE IF EXISTS sp_users_get_all $$
 CREATE PROCEDURE sp_users_get_all()
 BEGIN
-    SELECT u.user_id AS id, u.username, u.full_name AS fullName, u.`role`,
+    SELECT u.user_id AS id, u.username, u.email, u.full_name AS fullName, u.`role`,
            u.is_active AS isActive, u.created_at AS createdAt,
            o.office_id AS office_id, o.office_name AS office_officeName
     FROM users u
@@ -192,7 +252,7 @@ DROP PROCEDURE IF EXISTS sp_users_search $$
 CREATE PROCEDURE sp_users_search(IN p_search VARCHAR(255))
 BEGIN
     SET p_search = TRIM(p_search);
-    SELECT u.user_id AS id, u.username, u.full_name AS fullName, u.`role`,
+    SELECT u.user_id AS id, u.username, u.email, u.full_name AS fullName, u.`role`,
            u.is_active AS isActive, u.created_at AS createdAt,
            o.office_id AS office_id, o.office_name AS office_officeName
     FROM users u
@@ -207,7 +267,7 @@ END $$
 DROP PROCEDURE IF EXISTS sp_users_get_by_id $$
 CREATE PROCEDURE sp_users_get_by_id(IN p_id INT)
 BEGIN
-    SELECT u.user_id AS id, u.username, u.full_name AS fullName, u.`role`,
+    SELECT u.user_id AS id, u.username, u.email, u.full_name AS fullName, u.`role`,
            u.is_active AS isActive, u.created_at AS createdAt,
            o.office_id AS office_id, o.office_name AS office_officeName
     FROM users u
@@ -236,27 +296,37 @@ BEGIN
     WHERE LOWER(username) = LOWER(p_username);
 END $$
 
+-- p_exclude_id lets an update check "does any OTHER user already have this email"
+-- (pass 0 on create, since no row to exclude yet).
+DROP PROCEDURE IF EXISTS sp_users_email_exists $$
+CREATE PROCEDURE sp_users_email_exists(IN p_email VARCHAR(255), IN p_exclude_id INT, OUT p_exists BOOLEAN)
+BEGIN
+    SELECT COUNT(*) > 0 INTO p_exists FROM users
+    WHERE LOWER(email) = LOWER(p_email) AND user_id != p_exclude_id;
+END $$
+
 DROP PROCEDURE IF EXISTS sp_users_create $$
 CREATE PROCEDURE sp_users_create(
-    IN p_username VARCHAR(50), IN p_password_hash VARCHAR(255),
+    IN p_username VARCHAR(50), IN p_email VARCHAR(255), IN p_password_hash VARCHAR(255),
     IN p_full_name VARCHAR(100), IN p_role VARCHAR(20),
     IN p_office_id INT, IN p_is_active BOOLEAN,
     OUT p_id INT
 )
 BEGIN
-    INSERT INTO users(username, password_hash, full_name, `role`, office_id, is_active, created_at)
-    VALUES(p_username, p_password_hash, p_full_name, p_role, NULLIF(p_office_id, 0), p_is_active, NOW());
+    INSERT INTO users(username, email, password_hash, full_name, `role`, office_id, is_active, created_at)
+    VALUES(p_username, NULLIF(p_email, ''), p_password_hash, p_full_name, p_role, NULLIF(p_office_id, 0), p_is_active, NOW());
     SET p_id = LAST_INSERT_ID();
 END $$
 
 DROP PROCEDURE IF EXISTS sp_users_update $$
 CREATE PROCEDURE sp_users_update(
-    IN p_id INT, IN p_full_name VARCHAR(100), IN p_role VARCHAR(20),
+    IN p_id INT, IN p_email VARCHAR(255), IN p_full_name VARCHAR(100), IN p_role VARCHAR(20),
     IN p_office_id INT, IN p_is_active BOOLEAN, IN p_password_hash VARCHAR(255)
 )
 BEGIN
     UPDATE users
-    SET full_name = p_full_name,
+    SET email = NULLIF(p_email, ''),
+        full_name = p_full_name,
         `role` = p_role,
         office_id = NULLIF(p_office_id, 0),
         is_active = p_is_active,
@@ -267,7 +337,25 @@ END $$
 DROP PROCEDURE IF EXISTS sp_users_change_password $$
 CREATE PROCEDURE sp_users_change_password(IN p_id INT, IN p_password_hash VARCHAR(255))
 BEGIN
-    UPDATE users SET password_hash = p_password_hash WHERE user_id = p_id;
+    UPDATE users
+    SET password_hash = p_password_hash,
+        token_version = token_version + 1
+    WHERE user_id = p_id;
+END $$
+
+-- Self-service completion of a forced password change (first login after account
+-- creation or an admin-mediated reset). Combines a normal password change with
+-- clearing must_change_password and any lockout state left over from earlier attempts.
+DROP PROCEDURE IF EXISTS sp_auth_complete_forced_password_change $$
+CREATE PROCEDURE sp_auth_complete_forced_password_change(IN p_id INT, IN p_password_hash VARCHAR(255))
+BEGIN
+    UPDATE users
+    SET password_hash = p_password_hash,
+        token_version = token_version + 1,
+        must_change_password = FALSE,
+        failed_login_attempts = 0,
+        account_locked_until = NULL
+    WHERE user_id = p_id;
 END $$
 
 DROP PROCEDURE IF EXISTS sp_users_delete $$
@@ -510,7 +598,7 @@ BEGIN
     SET p_search = TRIM(p_search);
     SELECT m.maintenance_id AS id, m.maintenance_type AS maintenanceType,
            m.findings, m.actions_taken AS actionsTaken,
-           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt,
+           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt, m.updated_at AS updatedAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
            m.assigned_to AS assignedTo
@@ -538,7 +626,7 @@ CREATE PROCEDURE sp_maintenance_get_by_id(IN p_id INT)
 BEGIN
     SELECT m.maintenance_id AS id, m.maintenance_type AS maintenanceType,
            m.findings, m.actions_taken AS actionsTaken,
-           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt,
+           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt, m.updated_at AS updatedAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
            m.assigned_to AS assignedTo
@@ -553,7 +641,7 @@ CREATE PROCEDURE sp_maintenance_get_by_asset(IN p_asset_id INT)
 BEGIN
     SELECT m.maintenance_id AS id, m.maintenance_type AS maintenanceType,
            m.findings, m.actions_taken AS actionsTaken,
-           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt,
+           m.maintenance_date AS maintenanceDate, m.cost, m.`status`, m.created_at AS createdAt, m.updated_at AS updatedAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
            r.user_id AS rb_id, r.username AS rb_username, r.full_name AS rb_fullName,
            m.assigned_to AS assignedTo
@@ -652,7 +740,7 @@ BEGIN
     SET p_search = TRIM(p_search);
     SELECT d.disposal_id AS id, d.reason, d.inspection_findings AS inspectionFindings,
            d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
-           d.inspection_date AS inspectionDate, d.created_at AS createdAt,
+           d.inspection_date AS inspectionDate, d.created_at AS createdAt, d.updated_at AS updatedAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
            a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
            a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
@@ -683,7 +771,7 @@ CREATE PROCEDURE sp_disposal_get_by_id(IN p_id INT)
 BEGIN
     SELECT d.disposal_id AS id, d.reason, d.inspection_findings AS inspectionFindings,
            d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
-           d.inspection_date AS inspectionDate, d.created_at AS createdAt,
+           d.inspection_date AS inspectionDate, d.created_at AS createdAt, d.updated_at AS updatedAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
            a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
            a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,
@@ -701,7 +789,7 @@ CREATE PROCEDURE sp_disposal_get_by_asset(IN p_asset_id INT)
 BEGIN
     SELECT d.disposal_id AS id, d.reason, d.inspection_findings AS inspectionFindings,
            d.recommended_method AS recommendedMethod, d.disposal_status AS disposalStatus,
-           d.inspection_date AS inspectionDate, d.created_at AS createdAt,
+           d.inspection_date AS inspectionDate, d.created_at AS createdAt, d.updated_at AS updatedAt,
            a.asset_id, a.property_number AS asset_propertyNumber, a.`description` AS asset_description,
            a.quantity AS asset_quantity, a.unit_value AS asset_unitValue,
            a.acquisition_date AS asset_acquisitionDate, a.`condition` AS asset_condition,

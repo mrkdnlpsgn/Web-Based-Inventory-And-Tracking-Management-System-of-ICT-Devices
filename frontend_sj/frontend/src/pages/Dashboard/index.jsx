@@ -6,6 +6,7 @@ import MainLayout from '../../components/layout/MainLayout'
 import { getAssets } from '../../services/assetService'
 import { getAssetHistory } from '../../services/assetHistoryService'
 import { getUsers } from '../../services/userService'
+import { getRecommendationSummary } from '../../services/aiRecommendationService'
 
 // ── Count-up hook ─────────────────────────────────────────────────────────────
 function useCountUp(target, active) {
@@ -29,6 +30,28 @@ function useCountUp(target, active) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [target, active])
   return value
+}
+
+// ── Animated 0→1 progress (for the lifecycle ring's sweep-in) ─────────────────
+function useAnimatedProgress(duration, active) {
+  const [progress, setProgress] = useState(0)
+  const rafRef = useRef(null)
+  useEffect(() => {
+    cancelAnimationFrame(rafRef.current)
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!active || reduced) { setProgress(1); return }
+    setProgress(0)
+    const start = performance.now()
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setProgress(eased)
+      if (p < 1) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [active, duration])
+  return progress
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -76,30 +99,84 @@ const CONDITION_CFG = {
   UNSERVICEABLE: { bar: 'bg-red-500',     text: 'text-red-400',     dot: 'bg-red-400',     label: 'Unserviceable' },
 }
 
-const LIFECYCLE_ORDER = ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'UNDER_MAINTENANCE', 'DISPOSED', 'ARCHIVED']
-const LIFECYCLE_CFG = {
-  REGISTERED:       { bar: 'bg-blue-500',    dot: 'bg-blue-400',    label: 'Registered' },
-  ASSIGNED:         { bar: 'bg-emerald-500', dot: 'bg-emerald-400', label: 'Assigned' },
-  TRANSFERRED:      { bar: 'bg-orange-500',  dot: 'bg-orange-400',  label: 'Transferred' },
-  UNDER_MAINTENANCE:{ bar: 'bg-amber-500',   dot: 'bg-amber-400',   label: 'Under Maintenance' },
-  DISPOSED:         { bar: 'bg-red-500',     dot: 'bg-red-400',     label: 'Disposed' },
-  ARCHIVED:         { bar: 'bg-zinc-500',    dot: 'bg-zinc-400',    label: 'Archived' },
+const RECOMMENDATION_ORDER = ['BUDGET_PRIORITY', 'REVIEW_FOR_DISPOSAL', 'REPAIR', 'MONITOR', 'MAINTAIN']
+const RECOMMENDATION_CFG = {
+  BUDGET_PRIORITY:     { dot: 'bg-red-400',     label: 'Budget Priority' },
+  REVIEW_FOR_DISPOSAL: { dot: 'bg-orange-400',  label: 'Review for Disposal' },
+  REPAIR:              { dot: 'bg-amber-400',   label: 'Repair' },
+  MONITOR:             { dot: 'bg-blue-400',    label: 'Monitor' },
+  MAINTAIN:            { dot: 'bg-emerald-400', label: 'Maintain' },
 }
 
-function computeActivityTrend(history) {
+const LIFECYCLE_ORDER = ['REGISTERED', 'ASSIGNED', 'TRANSFERRED', 'UNDER_MAINTENANCE', 'DISPOSED', 'ARCHIVED']
+const LIFECYCLE_CFG = {
+  REGISTERED:       { bar: 'bg-blue-500',    dot: 'bg-blue-400',    label: 'Registered',        hex: '#3b82f6' },
+  ASSIGNED:         { bar: 'bg-emerald-500', dot: 'bg-emerald-400', label: 'Assigned',          hex: '#10b981' },
+  TRANSFERRED:      { bar: 'bg-orange-500',  dot: 'bg-orange-400',  label: 'Transferred',       hex: '#f97316' },
+  UNDER_MAINTENANCE:{ bar: 'bg-amber-500',   dot: 'bg-amber-400',   label: 'Under Maintenance', hex: '#f59e0b' },
+  DISPOSED:         { bar: 'bg-red-500',     dot: 'bg-red-400',     label: 'Disposed',          hex: '#ef4444' },
+  ARCHIVED:         { bar: 'bg-zinc-500',    dot: 'bg-zinc-400',    label: 'Archived',          hex: '#71717a' },
+}
+
+const ACTIVITY_RANGES = {
+  day:   { unit: 'hour',  count: 24, title: 'Activity — Today',         periodLabel: 'today' },
+  week:  { unit: 'day',   count: 7,  title: 'Activity — Last 7 Days',   periodLabel: 'this week' },
+  month: { unit: 'day',   count: 30, title: 'Activity — Last 30 Days',  periodLabel: 'this month' },
+  year:  { unit: 'month', count: 12, title: 'Activity — Last 12 Months', periodLabel: 'this year' },
+}
+
+function computeActivityTrend(history, range = 'week') {
   const now = new Date()
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const cfg = ACTIVITY_RANGES[range] || ACTIVITY_RANGES.week
+
+  if (cfg.unit === 'hour') {
+    const buckets = Array.from({ length: cfg.count }, (_, i) => {
+      const d = new Date(now)
+      d.setMinutes(0, 0, 0)
+      d.setHours(d.getHours() - (cfg.count - 1 - i))
+      const hour = d.getHours()
+      const label = hour === 0 ? '12a' : hour === 12 ? '12p' : hour > 12 ? `${hour - 12}p` : `${hour}a`
+      return { key: `${localDateStr(d)}T${String(hour).padStart(2, '0')}`, label, count: 0, isCurrent: i === cfg.count - 1 }
+    })
+    history.forEach((h) => {
+      if (!h.eventDate) return
+      const d = new Date(h.eventDate)
+      const key = `${localDateStr(d)}T${String(d.getHours()).padStart(2, '0')}`
+      const b = buckets.find((x) => x.key === key)
+      if (b) b.count++
+    })
+    return buckets
+  }
+
+  if (cfg.unit === 'month') {
+    const buckets = Array.from({ length: cfg.count }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (cfg.count - 1 - i), 1)
+      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString('en-PH', { month: 'short' }), count: 0, isCurrent: i === cfg.count - 1 }
+    })
+    history.forEach((h) => {
+      if (!h.eventDate) return
+      const d = new Date(h.eventDate)
+      const key = `${d.getFullYear()}-${d.getMonth()}`
+      const b = buckets.find((x) => x.key === key)
+      if (b) b.count++
+    })
+    return buckets
+  }
+
+  // day-unit buckets (week / month ranges)
+  const buckets = Array.from({ length: cfg.count }, (_, i) => {
     const d = new Date(now)
-    d.setDate(d.getDate() - (6 - i))
-    return { date: localDateStr(d), label: d.toLocaleDateString('en-PH', { weekday: 'short' }), count: 0 }
+    d.setDate(d.getDate() - (cfg.count - 1 - i))
+    const label = cfg.count > 7 ? String(d.getDate()) : d.toLocaleDateString('en-PH', { weekday: 'short' })
+    return { key: localDateStr(d), label, count: 0, isCurrent: i === cfg.count - 1 }
   })
   history.forEach((h) => {
     if (!h.eventDate) return
-    const d = h.eventDate.slice(0, 10)
-    const day = days.find((x) => x.date === d)
-    if (day) day.count++
+    const key = h.eventDate.slice(0, 10)
+    const b = buckets.find((x) => x.key === key)
+    if (b) b.count++
   })
-  return days
+  return buckets
 }
 
 function computeOfficeDist(assets) {
@@ -259,38 +336,87 @@ function ConditionDistribution({ condDist, total, loading }) {
 }
 
 function LifecycleDistribution({ lifecycleDist, total, loading }) {
+  const active = !loading && total > 0
+  const progress = useAnimatedProgress(1100, active)
+  const animatedTotal = useCountUp(total, !loading)
+
+  const R = 64
+  const STROKE = 18
+  const C = 2 * Math.PI * R
+  const GAP = 6
+
+  let cumulative = 0
+  const segments = active
+    ? LIFECYCLE_ORDER.filter((s) => (lifecycleDist[s] || 0) > 0).map((s) => {
+        const count = lifecycleDist[s] || 0
+        const fullLen = (count / total) * C
+        const start = cumulative
+        cumulative += fullLen
+        const drawn = Math.max(fullLen * progress - GAP, 0)
+        return { key: s, color: LIFECYCLE_CFG[s].hex, dasharray: `${drawn} ${C - drawn}`, dashoffset: -start }
+      })
+    : []
+
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
       <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
         <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Lifecycle Status</p>
         {!loading && <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total} total</span>}
       </div>
-      <div className="p-4 space-y-2.5">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Sk className="w-2 h-2 rounded-full flex-shrink-0" />
-                <Sk className="h-3 flex-1" />
-                <Sk className="h-3 w-6" />
-              </div>
-            ))
-          : total === 0
-          ? <p className="text-xs text-slate-400 dark:text-zinc-600 text-center py-6">No assets yet.</p>
-          : LIFECYCLE_ORDER.map((s) => {
-              const count = lifecycleDist[s] || 0
-              if (count === 0) return null
-              const pct = Math.round((count / total) * 100)
-              const cfg = LIFECYCLE_CFG[s]
-              return (
-                <div key={s} className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-                  <span className="text-xs text-slate-500 dark:text-zinc-400 flex-1 truncate">{cfg.label}</span>
-                  <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums">{count}</span>
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-600 tabular-nums w-7 text-right">{pct}%</span>
+      <div className="p-4">
+        {loading ? (
+          <div className="flex flex-col items-center gap-4">
+            <Sk className="w-36 h-36 rounded-full" />
+            <div className="w-full space-y-2.5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Sk className="w-2 h-2 rounded-full flex-shrink-0" />
+                  <Sk className="h-3 flex-1" />
+                  <Sk className="h-3 w-6" />
                 </div>
-              )
-            })
-        }
+              ))}
+            </div>
+          </div>
+        ) : total === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-zinc-600 text-center py-6">No assets yet.</p>
+        ) : (
+          <>
+            <div className="relative w-36 h-36 mx-auto mb-4">
+              <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
+                <circle cx="80" cy="80" r={R} fill="none" strokeWidth={STROKE} className="stroke-slate-100 dark:stroke-zinc-800" />
+                {segments.map((seg) => (
+                  <circle
+                    key={seg.key}
+                    cx="80" cy="80" r={R} fill="none"
+                    strokeWidth={STROKE}
+                    strokeLinecap="round"
+                    style={{ stroke: seg.color, strokeDasharray: seg.dasharray, strokeDashoffset: seg.dashoffset }}
+                  />
+                ))}
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">{animatedTotal}</span>
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-zinc-600 tracking-wide">ASSETS</span>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              {LIFECYCLE_ORDER.map((s) => {
+                const count = lifecycleDist[s] || 0
+                if (count === 0) return null
+                const pct = Math.round((count / total) * 100)
+                const cfg = LIFECYCLE_CFG[s]
+                return (
+                  <div key={s} className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                    <span className="text-xs text-slate-500 dark:text-zinc-400 flex-1 truncate">{cfg.label}</span>
+                    <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums">{count}</span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-600 tabular-nums w-7 text-right">{pct}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -327,7 +453,7 @@ function OfficeDistribution({ offices, total, loading }) {
                   </div>
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-blue-500 transition-all duration-700" style={{ width: `${(count / max) * 100}%` }} />
+                  <div className="h-full w-full rounded-full bg-blue-500 origin-left transition-transform duration-[250ms] ease-out" style={{ transform: `scaleX(${count / max})` }} />
                 </div>
               </div>
             )
@@ -365,7 +491,7 @@ function TopAccountable({ people, loading }) {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-slate-600 dark:text-zinc-300 truncate leading-tight mb-1.5" title={name}>{name}</p>
                 <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-500 transition-all duration-700" style={{ width: `${(count / max) * 100}%` }} />
+                  <div className="h-full w-full rounded-full bg-brand-500 origin-left transition-transform duration-[250ms] ease-out" style={{ transform: `scaleX(${count / max})` }} />
                 </div>
               </div>
               <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums flex-shrink-0">{count}</span>
@@ -377,18 +503,91 @@ function TopAccountable({ people, loading }) {
   )
 }
 
-function ActivityTrend({ trend, loading }) {
-  const max = Math.max(...trend.map((d) => d.count), 1)
-  const today = localDateStr(new Date())
-  const total7 = trend.reduce((s, d) => s + d.count, 0)
-  const skH = [38, 56, 24, 68, 44, 52, 32]
+function AiRecommendationsSummary({ summary, total, loading }) {
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
       <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Activity — Last 7 Days</p>
-        {!loading && (
-          <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total7} event{total7 !== 1 ? 's' : ''} this week</span>
+        <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">AI Lifecycle Insights</p>
+        {!loading && total > 0 && <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total} generated</span>}
+      </div>
+      <div className="p-4 space-y-2.5">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Sk className="w-2 h-2 rounded-full flex-shrink-0" />
+              <Sk className="h-3 flex-1" />
+              <Sk className="h-3 w-6" />
+            </div>
+          ))
+        ) : total === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-zinc-600 text-center py-6">
+            No AI recommendations yet. Open an asset and generate one from its AI Insight tab.
+          </p>
+        ) : (
+          RECOMMENDATION_ORDER.map((r) => {
+            const count = summary[r] || 0
+            if (count === 0) return null
+            const pct = Math.round((count / total) * 100)
+            const cfg = RECOMMENDATION_CFG[r]
+            return (
+              <div key={r} className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                <span className="text-xs text-slate-500 dark:text-zinc-400 flex-1 truncate">{cfg.label}</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300 tabular-nums">{count}</span>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-600 tabular-nums w-7 text-right">{pct}%</span>
+              </div>
+            )
+          })
         )}
+      </div>
+    </div>
+  )
+}
+
+const ACTIVITY_RANGE_OPTIONS = [
+  { key: 'day',   label: 'Day' },
+  { key: 'week',  label: 'Week' },
+  { key: 'month', label: 'Month' },
+  { key: 'year',  label: 'Year' },
+]
+
+function ActivityRangeToggle({ range, onChange }) {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/60 p-0.5">
+      {ACTIVITY_RANGE_OPTIONS.map((opt) => (
+        <button
+          key={opt.key}
+          onClick={() => onChange(opt.key)}
+          className={`px-2.5 py-1 rounded-md text-2xs font-medium transition-all duration-150 ${
+            range === opt.key
+              ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-sm'
+              : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ActivityTrend({ trend, loading, range, onRangeChange }) {
+  const cfg = ACTIVITY_RANGES[range] || ACTIVITY_RANGES.week
+  const max = Math.max(...trend.map((d) => d.count), 1)
+  const total = trend.reduce((s, d) => s + d.count, 0)
+  const skH = [38, 56, 24, 68, 44, 52, 32]
+  // Thin out labels once bars get dense (24 hourly / 30 daily bars) so text doesn't collide.
+  const labelStride = trend.length > 14 ? Math.ceil(trend.length / 8) : 1
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
+      <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">{cfg.title}</p>
+          {!loading && (
+            <span className="text-xs text-slate-400 dark:text-zinc-600 tabular-nums">{total} event{total !== 1 ? 's' : ''} {cfg.periodLabel}</span>
+          )}
+        </div>
+        <ActivityRangeToggle range={range} onChange={onRangeChange} />
       </div>
       <div className="px-5 py-4">
         {loading ? (
@@ -401,31 +600,30 @@ function ActivityTrend({ trend, loading }) {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="flex items-end gap-2" style={{ height: '80px' }}>
-              {trend.map((day) => {
-                const barH = day.count === 0 ? 3 : Math.max((day.count / max) * 68, 6)
-                const isToday = day.date === today
+            <div className="flex items-end gap-1 gap-x-1" style={{ height: '80px' }}>
+              {trend.map((bucket) => {
+                const barH = bucket.count === 0 ? 3 : Math.max((bucket.count / max) * 68, 6)
                 return (
-                  <div key={day.date} className="flex flex-col items-center justify-end flex-1 h-full">
-                    {day.count > 0 && (
-                      <span className="text-2xs text-slate-400 dark:text-zinc-500 tabular-nums mb-1 leading-none">{day.count}</span>
+                  <div key={bucket.key} className="flex flex-col items-center justify-end flex-1 h-full min-w-0">
+                    {bucket.count > 0 && trend.length <= 14 && (
+                      <span className="text-2xs text-slate-400 dark:text-zinc-500 tabular-nums mb-1 leading-none">{bucket.count}</span>
                     )}
                     <div
-                      className={`w-full rounded-sm transition-all duration-500 ${isToday ? 'bg-brand-500' : 'bg-brand-500/35 hover:bg-brand-500/60'}`}
+                      className={`w-full rounded-sm transition-all duration-500 ${bucket.isCurrent ? 'bg-brand-500' : 'bg-brand-500/35 hover:bg-brand-500/60'}`}
                       style={{ height: `${barH}px` }}
-                      title={`${day.count} event${day.count !== 1 ? 's' : ''} on ${day.date}`}
+                      title={`${bucket.count} event${bucket.count !== 1 ? 's' : ''} — ${bucket.label}`}
                     />
                   </div>
                 )
               })}
             </div>
-            <div className="flex gap-2">
-              {trend.map((day) => (
+            <div className="flex gap-1">
+              {trend.map((bucket, i) => (
                 <span
-                  key={day.date}
-                  className={`flex-1 text-center text-2xs ${day.date === today ? 'text-brand-400 font-semibold' : 'text-slate-400 dark:text-zinc-600'}`}
+                  key={bucket.key}
+                  className={`flex-1 text-center text-2xs truncate ${bucket.isCurrent ? 'text-brand-400 font-semibold' : 'text-slate-400 dark:text-zinc-600'}`}
                 >
-                  {day.label}
+                  {i % labelStride === 0 || bucket.isCurrent ? bucket.label : ''}
                 </span>
               ))}
             </div>
@@ -436,9 +634,9 @@ function ActivityTrend({ trend, loading }) {
   )
 }
 
-function ActivityFeed({ events, loading }) {
+function ActivityFeed({ events, loading, className = '' }) {
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col">
+    <div className={`bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col ${className}`}>
       <div className="px-5 py-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
         <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Recent Activity</p>
         {!loading && events.length > 0 && (
@@ -516,7 +714,7 @@ function CategoryBreakdown({ breakdown, total, loading }) {
                   </div>
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-500 transition-all duration-700" style={{ width: `${(count / max) * 100}%` }} />
+                  <div className="h-full w-full rounded-full bg-brand-500 origin-left transition-transform duration-[250ms] ease-out" style={{ transform: `scaleX(${count / max})` }} />
                 </div>
               </div>
             )
@@ -536,6 +734,8 @@ function Dashboard() {
   const [assets, setLocalAssets] = useState([])
   const [history, setHistory]   = useState([])
   const [userCount, setUserCount] = useState(0)
+  const [aiSummary, setAiSummary] = useState([])
+  const [activityRange, setActivityRange] = useState('week')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -544,7 +744,8 @@ function Dashboard() {
       getAssets().catch(() => null),
       getAssetHistory().catch(() => null),
       getUsers().catch(() => null),
-    ]).then(([assetRes, histRes, userRes]) => {
+      getRecommendationSummary().catch(() => null),
+    ]).then(([assetRes, histRes, userRes, aiRes]) => {
       if (!assetRes && !histRes && !userRes) { setError(true); setLoading(false); return }
       const a = assetRes?.data ?? []
       const h = histRes?.data  ?? []
@@ -553,6 +754,7 @@ function Dashboard() {
       dispatch(setAssets(a))
       setHistory(h)
       setUserCount(u.length)
+      setAiSummary(aiRes?.data ?? [])
       setLoading(false)
     })
   }, [dispatch])
@@ -581,7 +783,7 @@ function Dashboard() {
 
   const officeDist     = useMemo(() => computeOfficeDist(assets), [assets])
   const topAccountable = useMemo(() => computeTopAccountable(assets), [assets])
-  const activityTrend  = useMemo(() => computeActivityTrend(history), [history])
+  const activityTrend  = useMemo(() => computeActivityTrend(history, activityRange), [history, activityRange])
 
   const categoryBreakdown = useMemo(() => {
     const map = {}
@@ -594,6 +796,10 @@ function Dashboard() {
 
   const recentEvents = history.slice(0, 8)
 
+  const aiSummaryMap = {}
+  let aiSummaryTotal = 0
+  aiSummary.forEach(({ recommendation, count }) => { aiSummaryMap[recommendation] = count; aiSummaryTotal += count })
+
   const animAssets  = useCountUp(totalAssets,     !loading)
   const animValue   = useCountUp(Math.round(totalValue), !loading)
   const animMaint   = useCountUp(underMaintenance, !loading)
@@ -603,7 +809,7 @@ function Dashboard() {
 
   const stats = [
     {
-      label: 'ICT Assets', value: animAssets.toLocaleString(),
+      label: 'Assets', value: animAssets.toLocaleString(),
       sub: 'Total registered assets', delta: newThisMonth, href: '/assets',
       icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" /></svg>,
     },
@@ -668,14 +874,15 @@ function Dashboard() {
 
       {/* Activity trend */}
       <div className="mb-5">
-        <ActivityTrend trend={activityTrend} loading={loading} />
+        <ActivityTrend trend={activityTrend} loading={loading} range={activityRange} onRangeChange={setActivityRange} />
       </div>
 
       {/* Activity feed + category breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
-        <ActivityFeed events={recentEvents} loading={loading} />
-        <div className="space-y-5">
+        <ActivityFeed events={recentEvents} loading={loading} className="h-fit self-start" />
+        <div className="space-y-5 h-fit self-start">
           <CategoryBreakdown breakdown={categoryBreakdown} total={totalAssets} loading={loading} />
+          <AiRecommendationsSummary summary={aiSummaryMap} total={aiSummaryTotal} loading={loading} />
           <TopAccountable people={topAccountable} loading={loading} />
         </div>
       </div>

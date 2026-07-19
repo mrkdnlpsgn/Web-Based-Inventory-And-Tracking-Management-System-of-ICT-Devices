@@ -22,6 +22,11 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
+    // Used only for the forgot-password OTP flow (AuthService, via raw JDBC) — not
+    // used for login. Nullable: many accounts are admin-created before an email exists.
+    @Column(unique = true, length = 255)
+    private String email;
+
     @JsonIgnore
     @Column(name = "password_hash", nullable = false)
     private String password;
@@ -47,6 +52,24 @@ public class User {
 
     @Column(name = "account_locked_until")
     private LocalDateTime accountLockedUntil;
+
+    // Bumped on every password change (self, admin-reset, forgot-password). Embedded
+    // as a claim in every JWT; JwtAuthFilter rejects tokens whose claim doesn't match
+    // the current value, so existing sessions can't outlive a password reset.
+    @Builder.Default
+    @Column(name = "token_version", nullable = false)
+    private Integer tokenVersion = 0;
+
+    // Forces a password change on next login — set on account creation and
+    // admin-mediated resets, cleared once the user picks their own password.
+    @Builder.Default
+    @Column(name = "must_change_password", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT TRUE")
+    private Boolean mustChangePassword = true;
+
+    // Set when the user acknowledges the Data Privacy Notice; null means not yet
+    // acknowledged, which triggers the one-time modal on their next session.
+    @Column(name = "privacy_acknowledged_at")
+    private LocalDateTime privacyAcknowledgedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

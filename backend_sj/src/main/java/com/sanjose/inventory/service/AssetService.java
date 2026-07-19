@@ -83,13 +83,17 @@ public class AssetService {
     }
 
     public Asset create(AssetRequest req) {
+        String propertyNumber = req.getPropertyNumber() != null && !req.getPropertyNumber().isBlank()
+            ? req.getPropertyNumber()
+            : generatePropertyNumber(req.getAcquisitionDate() != null ? req.getAcquisitionDate().getYear() : LocalDate.now().getYear());
+
         Long newId = SpHelper.callWithOutLong(jdbcTemplate,
             "CALL sp_assets_create(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            req.getPropertyNumber(), req.getDescription(),
+            propertyNumber, req.getDescription(),
             req.getCategoryId(), req.getQuantity() != null ? req.getQuantity() : 1,
             req.getAcquisitionDate(), req.getUnitValue(), req.getOfficeId(),
             req.getAccountablePerson(), req.getPhysicalCount(), req.getLocation(),
-            req.getCondition(), req.getLifecycleStatus(),
+            req.getCondition(), "ASSIGNED",
             req.getQrCodePath(), req.getSha256Hash(), req.getRemarks());
 
         Asset saved = findById(newId);
@@ -188,8 +192,17 @@ public class AssetService {
             jdbcTemplate.update("CALL sp_maintenance_delete_by_asset(?)", asset.getId());
             jdbcTemplate.update("CALL sp_disposal_delete_by_asset(?)", asset.getId());
             jdbcTemplate.update("CALL sp_assets_update_lifecycle(?, ?)",
-                asset.getId(), "REGISTERED");
+                asset.getId(), "ASSIGNED");
         }
+    }
+
+    private String generatePropertyNumber(int year) {
+        String prefix = "COA-" + year + "-";
+        Integer maxSeq = jdbcTemplate.queryForObject(
+            "SELECT MAX(CAST(SUBSTRING(property_number, LENGTH(?) + 1) AS UNSIGNED)) FROM assets WHERE property_number LIKE ?",
+            Integer.class, prefix, prefix + "%");
+        int next = (maxSeq != null ? maxSeq : 0) + 1;
+        return prefix + String.format("%03d", next);
     }
 
     private Long getUserIdByUsername(String username) {

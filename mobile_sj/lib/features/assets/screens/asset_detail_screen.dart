@@ -9,9 +9,14 @@ import '../model/ai_recommendation_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/delete_dialog.dart';
+import '../../../shared/widgets/main_shell.dart';
 import '../../auth/provider/auth_provider.dart';
 import '../../asset_history/model/asset_history_model.dart';
 import '../../asset_history/provider/asset_history_provider.dart';
+import '../../maintenance/model/maintenance_model.dart';
+import '../../maintenance/provider/maintenance_provider.dart';
+import '../../disposal/model/disposal_model.dart';
+import '../../disposal/provider/disposal_provider.dart';
 import '../widgets/asset_qr_sheet.dart';
 import '../../../shared/widgets/error_state.dart';
 
@@ -39,6 +44,8 @@ class AssetDetailScreen extends ConsumerWidget {
             onPressed: () {
               ref.invalidate(assetDetailProvider(assetId));
               ref.invalidate(assetHistoryProvider(assetId));
+              ref.invalidate(maintenanceByAssetProvider(assetId));
+              ref.invalidate(disposalByAssetProvider(assetId));
             },
           ),
           if (isAdmin && assetAsync.value != null) ...[
@@ -78,6 +85,8 @@ class AssetDetailScreen extends ConsumerWidget {
           onRetry: () {
             ref.invalidate(assetDetailProvider(assetId));
             ref.invalidate(assetHistoryProvider(assetId));
+            ref.invalidate(maintenanceByAssetProvider(assetId));
+            ref.invalidate(disposalByAssetProvider(assetId));
           },
         ),
         data: (asset) => _AssetDetailBody(asset: asset),
@@ -102,7 +111,7 @@ class _AssetDetailBody extends ConsumerWidget {
             unselectedLabelColor: context.colors.textSecondary,
             tabs: const [
               Tab(text: 'Details'),
-              Tab(text: 'History'),
+              Tab(text: 'Lifecycle'),
             ],
           ),
           Expanded(
@@ -126,7 +135,7 @@ class _DetailsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
       children: [
         Card(
           child: Padding(
@@ -237,26 +246,120 @@ class _HistoryTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(assetHistoryProvider(assetId));
-    return historyAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-      error: (err, _) => Center(child: Text(err.toString(), style: TextStyle(color: context.colors.textTertiary))),
-      data: (history) => history.isEmpty
-          ? Center(child: Text('No history available.', style: TextStyle(color: context.colors.textTertiary)))
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: history.length,
-              itemBuilder: (context, i) => _HistoryTile(item: history[i], isLast: i == history.length - 1),
-            ),
-    );
+    final maintenanceAsync = ref.watch(maintenanceByAssetProvider(assetId));
+    final disposalAsync = ref.watch(disposalByAssetProvider(assetId));
+
+    if (historyAsync.isLoading) {
+      return const Center(child: CircularProgressIndicator(color: AppTheme.brand));
+    }
+    if (historyAsync.hasError) {
+      return Center(
+        child: Text(historyAsync.error.toString(), style: TextStyle(color: context.colors.textTertiary)),
+      );
+    }
+
+    final entries = <_LifecycleEntry>[
+      ...(historyAsync.value ?? []).map(_LifecycleEntry.fromHistory),
+      ...(maintenanceAsync.value ?? []).map(_LifecycleEntry.fromMaintenance),
+      ...(disposalAsync.value ?? []).map(_LifecycleEntry.fromDisposal),
+    ]..sort((a, b) => b.sortDate.compareTo(a.sortDate));
+
+    return entries.isEmpty
+        ? Center(child: Text('No lifecycle events recorded.', style: TextStyle(color: context.colors.textTertiary)))
+        : ListView.builder(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
+            itemCount: entries.length,
+            itemBuilder: (context, i) => _LifecycleTile(entry: entries[i], isLast: i == entries.length - 1),
+          );
   }
 }
 
-class _HistoryTile extends StatelessWidget {
-  final AssetHistoryModel item;
-  final bool isLast;
-  const _HistoryTile({required this.item, required this.isLast});
+class _LifecycleEntry {
+  final String id;
+  final DateTime date;
+  // Distinct from [date]: what's actually used to order the merged timeline.
+  // maintenanceDate/inspectionDate are date-only (no time-of-day), so same-day
+  // entries always lose a naive tie-break against history's full-timestamp
+  // eventDate regardless of true recency — sortDate uses updatedAt/createdAt
+  // instead, which carry real time-of-day and reflect when the record was
+  // actually last touched, while [date] still displays the record's own date.
+  final DateTime sortDate;
+  final String title;
+  final Color color;
+  final IconData icon;
+  final String? meta;
+  final String? subtitle;
+  final String? note;
+  final Widget? badge;
+  final String? fromOffice;
+  final String? toOffice;
 
-  Color get _eventColor => switch (item.eventType) {
+  const _LifecycleEntry({
+    required this.id,
+    required this.date,
+    required this.sortDate,
+    required this.title,
+    required this.color,
+    required this.icon,
+    this.meta,
+    this.subtitle,
+    this.note,
+    this.badge,
+    this.fromOffice,
+    this.toOffice,
+  });
+
+  factory _LifecycleEntry.fromHistory(AssetHistoryModel h) {
+    final date = DateTime.tryParse(h.eventDate) ?? DateTime.now();
+    return _LifecycleEntry(
+      id: 'h-${h.id}',
+      date: date,
+      sortDate: date,
+      title: h.eventType.replaceAll('_', ' '),
+      color: _historyColor(h.eventType),
+      icon: _historyIcon(h.eventType),
+      meta: 'by ${h.performedBy.fullName}',
+      note: h.notes,
+      fromOffice: h.fromOffice?.officeName,
+      toOffice: h.toOffice?.officeName,
+    );
+  }
+
+  factory _LifecycleEntry.fromMaintenance(MaintenanceModel m) {
+    final date = DateTime.tryParse(m.maintenanceDate) ?? DateTime.now();
+    final sortDate = DateTime.tryParse(m.updatedAt ?? m.createdAt) ?? date;
+    return _LifecycleEntry(
+      id: 'm-${m.id}',
+      date: date,
+      sortDate: sortDate,
+      title: 'Maintenance – ${m.maintenanceType.replaceAll('_', ' ')}',
+      color: AppTheme.statusMaintenance,
+      icon: Icons.build_outlined,
+      meta: 'by ${m.recordedBy.fullName}',
+      subtitle: m.cost != null ? '₱${m.cost!.toStringAsFixed(2)}' : null,
+      note: m.findings,
+      badge: StatusBadge.maintenanceStatus(m.status, dense: true),
+    );
+  }
+
+  factory _LifecycleEntry.fromDisposal(DisposalModel d) {
+    final date = DateTime.tryParse(d.inspectionDate) ?? DateTime.now();
+    final sortDate = DateTime.tryParse(d.updatedAt ?? d.createdAt) ?? date;
+    return _LifecycleEntry(
+      id: 'd-${d.id}',
+      date: date,
+      sortDate: sortDate,
+      title: 'Disposal – ${d.recommendedMethod}',
+      color: AppTheme.statusDisposed,
+      icon: Icons.delete_outline_rounded,
+      meta: 'by ${d.recordedBy.fullName}',
+      subtitle: 'Inspected ${_fmtStatic(d.inspectionDate)}',
+      note: d.reason,
+      badge: StatusBadge.disposalStatus(d.disposalStatus, dense: true),
+    );
+  }
+
+  static Color _historyColor(String eventType) => switch (eventType) {
         'REGISTERED' => Colors.grey,
         'ASSIGNED' => AppTheme.statusAssigned,
         'TRANSFERRED' => AppTheme.statusTransferred,
@@ -266,7 +369,7 @@ class _HistoryTile extends StatelessWidget {
         _ => Colors.grey,
       };
 
-  IconData get _eventIcon => switch (item.eventType) {
+  static IconData _historyIcon(String eventType) => switch (eventType) {
         'REGISTERED' => Icons.add_circle_outline_rounded,
         'ASSIGNED' => Icons.person_add_outlined,
         'TRANSFERRED' => Icons.swap_horiz_rounded,
@@ -275,6 +378,21 @@ class _HistoryTile extends StatelessWidget {
         'ARCHIVED' => Icons.archive_outlined,
         _ => Icons.circle_outlined,
       };
+
+  static String _fmtStatic(String raw) {
+    try {
+      final dt = DateTime.parse(raw);
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
+}
+
+class _LifecycleTile extends StatelessWidget {
+  final _LifecycleEntry entry;
+  final bool isLast;
+  const _LifecycleTile({required this.entry, required this.isLast});
 
   @override
   Widget build(BuildContext context) {
@@ -289,11 +407,11 @@ class _HistoryTile extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: _eventColor.withValues(alpha: 0.15),
+                  color: entry.color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
-                  border: Border.all(color: _eventColor.withValues(alpha: 0.5)),
+                  border: Border.all(color: entry.color.withValues(alpha: 0.5)),
                 ),
-                child: Icon(_eventIcon, size: 16, color: _eventColor),
+                child: Icon(entry.icon, size: 16, color: entry.color),
               ),
               if (!isLast)
                 Expanded(
@@ -309,34 +427,48 @@ class _HistoryTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 6),
-                  Text(item.eventType.replaceAll('_', ' '),
-                      style: TextStyle(color: _eventColor, fontSize: 13, fontWeight: FontWeight.w600)),
-                  Text(_fmt(item.eventDate),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(entry.title,
+                            style: TextStyle(color: entry.color, fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                      if (entry.badge != null) entry.badge!,
+                    ],
+                  ),
+                  Text(_fmt(entry.date),
                       style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
-                  if (item.fromOffice != null || item.toOffice != null) ...[
+                  if (entry.fromOffice != null || entry.toOffice != null) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        if (item.fromOffice != null)
-                          Text(item.fromOffice!.officeName,
+                        if (entry.fromOffice != null)
+                          Text(entry.fromOffice!,
                               style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
-                        if (item.fromOffice != null && item.toOffice != null)
+                        if (entry.fromOffice != null && entry.toOffice != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                             child: Icon(Icons.arrow_forward_rounded, size: 12, color: context.colors.textSecondary),
                           ),
-                        if (item.toOffice != null)
-                          Text(item.toOffice!.officeName,
+                        if (entry.toOffice != null)
+                          Text(entry.toOffice!,
                               style: TextStyle(color: context.colors.textPrimary, fontSize: 12)),
                       ],
                     ),
                   ],
-                  if (item.notes != null && item.notes!.isNotEmpty) ...[
+                  if (entry.subtitle != null) ...[
                     const SizedBox(height: 4),
-                    Text(item.notes!, style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                    Text(entry.subtitle!, style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
                   ],
-                  Text('by ${item.performedBy.fullName}',
-                      style: TextStyle(color: context.colors.textSecondary, fontSize: 11)),
+                  if (entry.note != null && entry.note!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(entry.note!, style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                  ],
+                  if (entry.meta != null) ...[
+                    const SizedBox(height: 2),
+                    Text(entry.meta!, style: TextStyle(color: context.colors.textSecondary, fontSize: 11)),
+                  ],
                 ],
               ),
             ),
@@ -346,14 +478,8 @@ class _HistoryTile extends StatelessWidget {
     );
   }
 
-  String _fmt(String raw) {
-    try {
-      final dt = DateTime.parse(raw);
-      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return raw;
-    }
-  }
+  String _fmt(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 }
 
 class _AiRecommendationCard extends ConsumerStatefulWidget {
@@ -457,16 +583,30 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
               ],
             ),
             const SizedBox(height: 12),
-            recAsync.when(
+            AnimatedSwitcher(
+              duration: AppTheme.motionMedium,
+              switchInCurve: AppTheme.motionCurve,
+              switchOutCurve: AppTheme.motionCurve,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SizeTransition(sizeFactor: animation, alignment: Alignment.topCenter, child: child),
+              ),
+              child: recAsync.when(
               loading: () => const Padding(
+                key: ValueKey('loading'),
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Center(child: CircularProgressIndicator(color: AppTheme.brand)),
               ),
-              error: (e, _) => Text(e.toString(), style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+              error: (e, _) => Text(
+                key: const ValueKey('error'),
+                e.toString(),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+              ),
               data: (rec) {
                 if (rec == null) {
                   if (_generating) {
                     return Row(
+                      key: const ValueKey('generating'),
                       children: [
                         const SizedBox(
                           width: 14, height: 14,
@@ -479,6 +619,7 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
                     );
                   }
                   return Text(
+                    key: const ValueKey('empty'),
                     isAdmin
                         ? 'No recommendation yet. Tap refresh to generate one.'
                         : 'No recommendation generated yet.',
@@ -487,6 +628,7 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
                 }
                 final color = _color(rec.recommendation);
                 return Column(
+                  key: ValueKey('data-${rec.recommendation}-${rec.generatedAt}'),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
@@ -507,6 +649,7 @@ class _AiRecommendationCardState extends ConsumerState<_AiRecommendationCard> {
                   ],
                 );
               },
+              ),
             ),
           ],
         ),

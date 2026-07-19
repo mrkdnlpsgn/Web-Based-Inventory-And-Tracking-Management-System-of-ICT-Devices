@@ -15,8 +15,8 @@ function IdleWarningModal({ onStay, onLogout }) {
   }, [seconds, onLogout])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80">
-      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 animate-fade-in">
+      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-fade-slide">
 
         {/* Icon */}
         <div className="flex items-center justify-center w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 mx-auto mb-4">
