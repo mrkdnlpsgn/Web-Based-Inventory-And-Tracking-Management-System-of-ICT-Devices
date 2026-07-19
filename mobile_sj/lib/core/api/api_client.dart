@@ -18,7 +18,7 @@ class ApiClient {
   // backend) reaches the backend via the host machine directly.
   // Real device over Wi-Fi still needs this changed by hand to http://<your-PC-IP>:8080/api.
   static String get baseUrl =>
-      !kIsWeb && Platform.isAndroid ? 'http://10.0.2.2:8080/api' : 'http://localhost:8080/api';
+      !kIsWeb && Platform.isAndroid ? 'http://192.168.1.7:8080/api' : 'http://localhost:8080/api';
 
   Future<void> init() async {
     final dir = await getApplicationDocumentsDirectory();
