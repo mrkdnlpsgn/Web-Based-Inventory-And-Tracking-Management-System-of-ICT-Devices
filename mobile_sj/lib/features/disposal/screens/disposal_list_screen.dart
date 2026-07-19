@@ -5,6 +5,7 @@ import '../model/disposal_model.dart';
 import '../provider/disposal_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/paginated_list_view.dart';
+import '../../../shared/widgets/auto_refresh_ticker.dart';
 import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../features/auth/provider/auth_provider.dart';
@@ -82,14 +83,18 @@ class _DisposalListScreenState extends ConsumerState<DisposalListScreen> {
               },
             )
           : null,
-      body: PaginatedListView<DisposalModel>(
-        state: state,
-        emptyMessage: 'No disposal records.',
-        onLoadMore: () => ref.read(disposalPagedProvider(search).notifier).loadMore(),
-        onRefresh: () => ref.read(disposalPagedProvider(search).notifier).refresh(),
-        itemBuilder: (context, item, i) => _DisposalCard(
-          item: item,
-          onTap: () => context.push('/disposal/${item.id}'),
+      body: AutoRefreshTicker(
+        interval: const Duration(seconds: 30),
+        onTick: () => ref.read(disposalPagedProvider(search).notifier).silentRefresh(),
+        child: PaginatedListView<DisposalModel>(
+          state: state,
+          emptyMessage: 'No disposal records.',
+          onLoadMore: () => ref.read(disposalPagedProvider(search).notifier).loadMore(),
+          onRefresh: () => ref.read(disposalPagedProvider(search).notifier).refresh(),
+          itemBuilder: (context, item, i) => _DisposalCard(
+            item: item,
+            onTap: () => context.push('/disposal/${item.id}'),
+          ),
         ),
       ),
     );

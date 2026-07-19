@@ -8,6 +8,7 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/skeleton.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
 import '../../../shared/widgets/main_shell.dart';
+import '../../../shared/widgets/auto_refresh_ticker.dart';
 import '../../assets/provider/ai_recommendation_provider.dart';
 import '../../audit_log/provider/audit_log_digest_provider.dart';
 import '../provider/dashboard_provider.dart';
@@ -50,7 +51,14 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: AutoRefreshTicker(
+        interval: const Duration(seconds: 30),
+        onTick: () {
+          ref.invalidate(dashboardStatsProvider);
+          ref.invalidate(aiRecommendationSummaryProvider);
+          ref.invalidate(auditLogDigestProvider);
+        },
+        child: RefreshIndicator(
         color: AppTheme.brand,
         onRefresh: () async {
           ref.invalidate(dashboardStatsProvider);
@@ -114,8 +122,20 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
           ],
+          const SizedBox(height: 10),
+          StaggeredEntrance(
+            index: 4,
+            child: _NavCard(
+              icon: Icons.restore_from_trash_outlined,
+              title: 'Recycle Bin',
+              subtitle: 'View and restore deleted assets, maintenance, and disposal records',
+              color: AppTheme.statusRegistered,
+              onTap: () => context.push('/recycle-bin'),
+            ),
+          ),
         ],
         ),
+      ),
       ),
     );
   }

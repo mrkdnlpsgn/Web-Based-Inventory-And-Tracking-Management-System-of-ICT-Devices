@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { setCredentials } from '../../store/slices/authSlice'
 import { useToast } from '../../context/ToastContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { usePolling } from '../../hooks/usePolling'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import Badge from '../../components/common/Badge'
@@ -206,7 +207,7 @@ function AccountsTab() {
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
                   {users.map((user) => (
                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors duration-100">
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center flex-shrink-0">
                             <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300">{(user.fullName || user.username || 'U').charAt(0).toUpperCase()}</span>
@@ -214,18 +215,18 @@ function AccountsTab() {
                           <span className="font-mono text-xs text-slate-600 dark:text-zinc-400">@{user.username}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-xs">
+                      <td className="px-5 py-3.5 text-xs whitespace-nowrap">
                         {user.email
                           ? <span className="text-slate-500 dark:text-zinc-400">{user.email}</span>
                           : <span className="text-amber-500 dark:text-amber-400 italic">No email</span>}
                       </td>
-                      <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white">{user.fullName || '—'}</td>
+                      <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">{user.fullName || '—'}</td>
                       <td className="px-5 py-3.5">
                         <Badge variant={user.role === 'ADMIN' ? 'brand' : 'default'}>
                           {user.role === 'ADMIN' ? 'Administrator' : 'Staff'}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs">{user.officeName || '—'}</td>
+                      <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">{user.officeName || '—'}</td>
                       <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${user.isActive ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10' : 'text-slate-400 dark:text-zinc-600 bg-slate-100 dark:bg-zinc-800'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
@@ -290,19 +291,21 @@ function AuditLogsTab() {
 
   const debouncedSearch = useDebounce(search, 300)
 
-  const fetchLogs = useCallback(async (q = '') => {
-    setLoading(true)
+  const fetchLogs = useCallback(async (q = '', { silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const { data } = await getAuditLogs(q)
       setLogs(data)
     } catch {
-      toast.show('Failed to load audit logs.', 'error')
+      if (!silent) toast.show('Failed to load audit logs.', 'error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [toast])
 
   useEffect(() => { fetchLogs(debouncedSearch) }, [debouncedSearch, fetchLogs])
+
+  usePolling(() => fetchLogs(debouncedSearch, { silent: true }), 30000)
 
   const filtered = logs.filter((l) => {
     if (moduleFilter !== 'ALL' && l.module !== moduleFilter) return false

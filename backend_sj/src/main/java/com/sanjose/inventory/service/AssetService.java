@@ -145,11 +145,17 @@ public class AssetService {
         Asset asset = findById(id);
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         Long deleterId = getUserIdByUsername(username);
+        int deleterIdInt = deleterId != null ? deleterId.intValue() : 0;
+        // An asset under maintenance/disposal has an active ledger record tied to
+        // it — archive that too (not just the asset), so it shows up in its own
+        // Recycle Bin section instead of only being reachable via the asset's.
+        // No-ops for a serviceable asset, which has no active record to match.
+        jdbcTemplate.update("CALL sp_maintenance_soft_delete_by_asset(?, ?, ?, ?)",
+            id, deleterIdInt, username, deleteReason);
+        jdbcTemplate.update("CALL sp_disposal_soft_delete_by_asset(?, ?, ?, ?)",
+            id, deleterIdInt, username, deleteReason);
         jdbcTemplate.update("CALL sp_assets_soft_delete(?, ?, ?, ?)",
-            id,
-            deleterId != null ? deleterId.intValue() : 0,
-            username,
-            deleteReason);
+            id, deleterIdInt, username, deleteReason);
         auditLogService.log("ASSET_DELETED", "Assets", id, "asset",
             "Deleted: " + asset.getPropertyNumber());
     }

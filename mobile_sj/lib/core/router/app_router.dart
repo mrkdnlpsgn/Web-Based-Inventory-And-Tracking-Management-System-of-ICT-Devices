@@ -22,6 +22,7 @@ import '../../features/accounts/screens/account_form_screen.dart';
 import '../../features/accounts/model/account_model.dart';
 import '../../features/reports/screens/reports_list_screen.dart';
 import '../../features/reports/screens/report_preview_screen.dart';
+import '../../features/recycle_bin/screens/recycle_bin_screen.dart';
 import '../../features/qr_scanner/screens/qr_scanner_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/screens/change_password_screen.dart';
@@ -112,6 +113,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/reports/:id',
         pageBuilder: (c, s) => fadeThroughPage(c, s, ReportPreviewScreen(reportId: s.pathParameters['id']!)),
       ),
+      GoRoute(path: '/recycle-bin', pageBuilder: (c, s) => fadeThroughPage(c, s, const RecycleBinScreen())),
     ],
   );
 });

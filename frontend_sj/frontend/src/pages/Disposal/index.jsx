@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useToast } from '../../context/ToastContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { usePolling } from '../../hooks/usePolling'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -53,15 +54,15 @@ function Disposal() {
 
   const debouncedSearch = useDebounce(search, 300)
 
-  const fetchRecords = useCallback(async (q = '') => {
-    setLoading(true)
+  const fetchRecords = useCallback(async (q = '', { silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const { data } = await getDisposal(q)
       setRecords(data)
     } catch {
-      toast.show('Failed to load disposal records.', 'error')
+      if (!silent) toast.show('Failed to load disposal records.', 'error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [toast])
 
@@ -78,6 +79,8 @@ function Disposal() {
 
   useEffect(() => { fetchRecords(debouncedSearch) }, [debouncedSearch, fetchRecords])
   useEffect(() => { setPage(1) }, [debouncedSearch, filterStatus, filterMethod, assetFilter])
+
+  usePolling(() => fetchRecords(debouncedSearch, { silent: true }), 30000)
 
   const handleCreate = async (payload, idempotencyKey) => {
     const { data } = await createDisposal(payload, idempotencyKey)

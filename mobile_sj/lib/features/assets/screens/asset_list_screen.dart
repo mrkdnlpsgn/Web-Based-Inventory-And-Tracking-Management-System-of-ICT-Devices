@@ -6,6 +6,7 @@ import '../provider/asset_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/paginated_list_view.dart';
+import '../../../shared/widgets/auto_refresh_ticker.dart';
 import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/main_shell.dart';
 import '../../../features/auth/provider/auth_provider.dart';
@@ -86,15 +87,19 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
               ),
             )
           : null,
-      body: PaginatedListView<AssetModel>(
-        state: state,
-        emptyMessage: 'No assets found.',
-        extraBottomPadding: context.mainShellBottomInset,
-        onLoadMore: () => ref.read(assetsPagedProvider(search).notifier).loadMore(),
-        onRefresh: () => ref.read(assetsPagedProvider(search).notifier).refresh(),
-        itemBuilder: (context, asset, i) => _AssetCard(
-          asset: asset,
-          onTap: () => context.push('/assets/${asset.id}'),
+      body: AutoRefreshTicker(
+        interval: const Duration(seconds: 30),
+        onTick: () => ref.read(assetsPagedProvider(search).notifier).silentRefresh(),
+        child: PaginatedListView<AssetModel>(
+          state: state,
+          emptyMessage: 'No assets found.',
+          extraBottomPadding: context.mainShellBottomInset,
+          onLoadMore: () => ref.read(assetsPagedProvider(search).notifier).loadMore(),
+          onRefresh: () => ref.read(assetsPagedProvider(search).notifier).refresh(),
+          itemBuilder: (context, asset, i) => _AssetCard(
+            asset: asset,
+            onTap: () => context.push('/assets/${asset.id}'),
+          ),
         ),
       ),
     );

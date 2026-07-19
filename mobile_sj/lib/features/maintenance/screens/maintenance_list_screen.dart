@@ -5,6 +5,7 @@ import '../model/maintenance_model.dart';
 import '../provider/maintenance_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/paginated_list_view.dart';
+import '../../../shared/widgets/auto_refresh_ticker.dart';
 import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../features/auth/provider/auth_provider.dart';
@@ -82,14 +83,18 @@ class _MaintenanceListScreenState extends ConsumerState<MaintenanceListScreen> {
               },
             )
           : null,
-      body: PaginatedListView<MaintenanceModel>(
-        state: state,
-        emptyMessage: 'No maintenance records.',
-        onLoadMore: () => ref.read(maintenancePagedProvider(search).notifier).loadMore(),
-        onRefresh: () => ref.read(maintenancePagedProvider(search).notifier).refresh(),
-        itemBuilder: (context, item, i) => _MaintenanceCard(
-          item: item,
-          onTap: () => context.push('/maintenance/${item.id}'),
+      body: AutoRefreshTicker(
+        interval: const Duration(seconds: 30),
+        onTick: () => ref.read(maintenancePagedProvider(search).notifier).silentRefresh(),
+        child: PaginatedListView<MaintenanceModel>(
+          state: state,
+          emptyMessage: 'No maintenance records.',
+          onLoadMore: () => ref.read(maintenancePagedProvider(search).notifier).loadMore(),
+          onRefresh: () => ref.read(maintenancePagedProvider(search).notifier).refresh(),
+          itemBuilder: (context, item, i) => _MaintenanceCard(
+            item: item,
+            onTap: () => context.push('/maintenance/${item.id}'),
+          ),
         ),
       ),
     );

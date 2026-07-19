@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useDispatch } from 'react-redux'
 import { useToast } from '../../context/ToastContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { usePolling } from '../../hooks/usePolling'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
@@ -66,16 +67,16 @@ function Assets() {
     setTimeout(() => { setSelected(null); setAssetDrawerExiting(false) }, 220)
   }, [])
 
-  const fetchAssets = useCallback(async (q = '') => {
-    setLoading(true)
+  const fetchAssets = useCallback(async (q = '', { silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const { data } = await getAssets(q)
       setItems(data)
       dispatch(setAssets(data))
     } catch {
-      toast.show('Failed to load assets.', 'error')
+      if (!silent) toast.show('Failed to load assets.', 'error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [dispatch, toast])
 
@@ -92,6 +93,8 @@ function Assets() {
 
   useEffect(() => { fetchAssets(debouncedSearch) }, [debouncedSearch, fetchAssets])
   useEffect(() => { setPage(1) }, [debouncedSearch, filterCondition, filterLifecycle, filterCategory])
+
+  usePolling(() => fetchAssets(debouncedSearch, { silent: true }), 30000)
 
   const handleCreate = async (payload, idempotencyKey) => {
     const { data } = await createAsset(payload, idempotencyKey)

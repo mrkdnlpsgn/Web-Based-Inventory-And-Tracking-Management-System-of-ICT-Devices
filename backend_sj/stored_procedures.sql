@@ -489,14 +489,14 @@ BEGIN
     INSERT INTO deleted_assets(
         asset_id, property_number, `description`, category_id, category_name,
         quantity, acquisition_date, unit_value, office_id, office_name,
-        accountable_person_name, location, `condition`, lifecycle_status,
+        accountable_person_name, location, `condition`, asset_condition, lifecycle_status,
         qr_code_path, sha256_hash, remarks,
         original_created_at, original_updated_at,
         deleted_by_user_id, deleted_by_username, delete_reason, deleted_at
     )
     SELECT a.asset_id, a.property_number, a.`description`, a.category_id, c.category_name,
            a.quantity, a.acquisition_date, a.unit_value, a.office_id, o.office_name,
-           a.accountable_person, a.location, a.`condition`, a.lifecycle_status,
+           a.accountable_person, a.location, a.`condition`, a.`condition`, a.lifecycle_status,
            a.qr_code_path, a.sha256_hash, a.remarks,
            a.created_at, a.updated_at,
            p_deleted_by, p_deleted_by_username, p_reason, NOW()
@@ -508,6 +508,39 @@ BEGIN
     UPDATE assets
     SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = p_deleted_by, delete_reason = p_reason
     WHERE asset_id = p_id;
+END $$
+
+-- The original assets row is only ever soft-deleted in place (never removed),
+-- so restoring is just un-flagging it and dropping its archive snapshot —
+-- no data has to be reconstructed. Also cascades to any maintenance/disposal
+-- record that was archived alongside this same asset (see
+-- sp_maintenance_soft_delete_by_asset / sp_disposal_soft_delete_by_asset) —
+-- otherwise restoring the asset leaves its ledger record stuck looking
+-- deleted, or restoring the ledger record leaves its asset stuck deleted.
+DROP PROCEDURE IF EXISTS sp_assets_restore $$
+CREATE PROCEDURE sp_assets_restore(IN p_deleted_asset_id INT)
+BEGIN
+    DECLARE v_asset_id INT;
+    SELECT asset_id INTO v_asset_id FROM deleted_assets WHERE deleted_asset_id = p_deleted_asset_id;
+
+    UPDATE assets a
+    JOIN deleted_assets da ON da.asset_id = a.asset_id
+    SET a.is_deleted = FALSE, a.deleted_at = NULL, a.deleted_by = NULL, a.delete_reason = NULL
+    WHERE da.deleted_asset_id = p_deleted_asset_id;
+
+    DELETE FROM deleted_assets WHERE deleted_asset_id = p_deleted_asset_id;
+
+    UPDATE maintenance_ledger m
+    JOIN deleted_maintenance dm ON dm.maintenance_id = m.maintenance_id
+    SET m.is_deleted = FALSE, m.deleted_at = NULL, m.deleted_by = NULL, m.delete_reason = NULL
+    WHERE dm.asset_id = v_asset_id;
+    DELETE FROM deleted_maintenance WHERE asset_id = v_asset_id;
+
+    UPDATE disposal_ledger d
+    JOIN deleted_disposal dd ON dd.disposal_id = d.disposal_id
+    SET d.is_deleted = FALSE, d.deleted_at = NULL, d.deleted_by = NULL, d.delete_reason = NULL
+    WHERE dd.asset_id = v_asset_id;
+    DELETE FROM deleted_disposal WHERE asset_id = v_asset_id;
 END $$
 
 -- =============================================================
@@ -717,11 +750,68 @@ BEGIN
     WHERE maintenance_id = p_id;
 END $$
 
+-- Also cascades back to the parent asset if it's currently deleted too (see
+-- sp_assets_restore's comment for why this needs to go both directions).
+DROP PROCEDURE IF EXISTS sp_maintenance_restore $$
+CREATE PROCEDURE sp_maintenance_restore(IN p_deleted_maintenance_id INT)
+BEGIN
+    DECLARE v_asset_id INT;
+    SELECT asset_id INTO v_asset_id FROM deleted_maintenance WHERE deleted_maintenance_id = p_deleted_maintenance_id;
+
+    UPDATE maintenance_ledger m
+    JOIN deleted_maintenance dm ON dm.maintenance_id = m.maintenance_id
+    SET m.is_deleted = FALSE, m.deleted_at = NULL, m.deleted_by = NULL, m.delete_reason = NULL
+    WHERE dm.deleted_maintenance_id = p_deleted_maintenance_id;
+
+    DELETE FROM deleted_maintenance WHERE deleted_maintenance_id = p_deleted_maintenance_id;
+
+    UPDATE assets a
+    JOIN deleted_assets da ON da.asset_id = a.asset_id
+    SET a.is_deleted = FALSE, a.deleted_at = NULL, a.deleted_by = NULL, a.delete_reason = NULL
+    WHERE da.asset_id = v_asset_id;
+    DELETE FROM deleted_assets WHERE asset_id = v_asset_id;
+END $$
+
 DROP PROCEDURE IF EXISTS sp_maintenance_delete_by_asset $$
 CREATE PROCEDURE sp_maintenance_delete_by_asset(IN p_asset_id INT)
 BEGIN
     UPDATE maintenance_ledger
     SET is_deleted = TRUE, deleted_at = NOW()
+    WHERE asset_id = p_asset_id AND is_deleted = FALSE;
+END $$
+
+-- Used when the parent asset itself is deleted (as opposed to a condition
+-- change cascading via sp_maintenance_delete_by_asset above, which doesn't
+-- archive) — an asset's active maintenance record should show up in its own
+-- Recycle Bin section too, not just under the asset's.
+DROP PROCEDURE IF EXISTS sp_maintenance_soft_delete_by_asset $$
+CREATE PROCEDURE sp_maintenance_soft_delete_by_asset(
+    IN p_asset_id INT, IN p_deleted_by INT, IN p_deleted_by_username VARCHAR(50), IN p_reason TEXT
+)
+BEGIN
+    INSERT INTO deleted_maintenance(
+        maintenance_id, asset_id, property_number, asset_description,
+        maintenance_type, findings, actions_taken,
+        assigned_to_user_id, assigned_to_name,
+        maintenance_date, cost, `status`,
+        recorded_by_user_id, recorded_by_name,
+        original_created_at,
+        deleted_by_user_id, deleted_by_username, delete_reason, deleted_at
+    )
+    SELECT m.maintenance_id, m.asset_id, a.property_number, a.`description`,
+           m.maintenance_type, m.findings, m.actions_taken,
+           NULL, m.assigned_to,
+           m.maintenance_date, m.cost, m.`status`,
+           m.recorded_by, r.full_name,
+           m.created_at,
+           p_deleted_by, p_deleted_by_username, p_reason, NOW()
+    FROM maintenance_ledger m
+    LEFT JOIN assets a ON m.asset_id = a.asset_id
+    LEFT JOIN users r ON m.recorded_by = r.user_id
+    WHERE m.asset_id = p_asset_id AND m.is_deleted = FALSE;
+
+    UPDATE maintenance_ledger
+    SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = p_deleted_by, delete_reason = p_reason
     WHERE asset_id = p_asset_id AND is_deleted = FALSE;
 END $$
 
@@ -875,11 +965,67 @@ BEGIN
     WHERE disposal_id = p_id;
 END $$
 
+-- Also cascades back to the parent asset if it's currently deleted too (see
+-- sp_assets_restore's comment for why this needs to go both directions).
+DROP PROCEDURE IF EXISTS sp_disposal_restore $$
+CREATE PROCEDURE sp_disposal_restore(IN p_deleted_disposal_id INT)
+BEGIN
+    DECLARE v_asset_id INT;
+    SELECT asset_id INTO v_asset_id FROM deleted_disposal WHERE deleted_disposal_id = p_deleted_disposal_id;
+
+    UPDATE disposal_ledger d
+    JOIN deleted_disposal dd ON dd.disposal_id = d.disposal_id
+    SET d.is_deleted = FALSE, d.deleted_at = NULL, d.deleted_by = NULL, d.delete_reason = NULL
+    WHERE dd.deleted_disposal_id = p_deleted_disposal_id;
+
+    DELETE FROM deleted_disposal WHERE deleted_disposal_id = p_deleted_disposal_id;
+
+    UPDATE assets a
+    JOIN deleted_assets da ON da.asset_id = a.asset_id
+    SET a.is_deleted = FALSE, a.deleted_at = NULL, a.deleted_by = NULL, a.delete_reason = NULL
+    WHERE da.asset_id = v_asset_id;
+    DELETE FROM deleted_assets WHERE asset_id = v_asset_id;
+END $$
+
 DROP PROCEDURE IF EXISTS sp_disposal_delete_by_asset $$
 CREATE PROCEDURE sp_disposal_delete_by_asset(IN p_asset_id INT)
 BEGIN
     UPDATE disposal_ledger
     SET is_deleted = TRUE, deleted_at = NOW()
+    WHERE asset_id = p_asset_id AND is_deleted = FALSE;
+END $$
+
+-- Same reasoning as sp_maintenance_soft_delete_by_asset above, for disposal.
+DROP PROCEDURE IF EXISTS sp_disposal_soft_delete_by_asset $$
+CREATE PROCEDURE sp_disposal_soft_delete_by_asset(
+    IN p_asset_id INT, IN p_deleted_by INT, IN p_deleted_by_username VARCHAR(50), IN p_reason TEXT
+)
+BEGIN
+    INSERT INTO deleted_disposal(
+        disposal_id, asset_id, property_number, asset_description,
+        reason, inspection_findings, recommended_method,
+        disposal_status, inspection_date,
+        approved_by_user_id, approved_by_name,
+        appraised_value, or_number, amount,
+        recorded_by_user_id, recorded_by_name,
+        original_created_at,
+        deleted_by_user_id, deleted_by_username, delete_reason, deleted_at
+    )
+    SELECT d.disposal_id, d.asset_id, a.property_number, a.`description`,
+           d.reason, d.inspection_findings, d.recommended_method,
+           d.disposal_status, d.inspection_date,
+           NULL, d.approved_by,
+           d.appraised_value, d.or_number, d.amount,
+           d.recorded_by, r.full_name,
+           d.created_at,
+           p_deleted_by, p_deleted_by_username, p_reason, NOW()
+    FROM disposal_ledger d
+    LEFT JOIN assets a ON d.asset_id = a.asset_id
+    LEFT JOIN users r ON d.recorded_by = r.user_id
+    WHERE d.asset_id = p_asset_id AND d.is_deleted = FALSE;
+
+    UPDATE disposal_ledger
+    SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = p_deleted_by, delete_reason = p_reason
     WHERE asset_id = p_asset_id AND is_deleted = FALSE;
 END $$
 

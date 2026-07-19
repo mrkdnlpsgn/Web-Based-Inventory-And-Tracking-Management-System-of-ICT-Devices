@@ -7,6 +7,7 @@ import { getAssets } from '../../services/assetService'
 import { getAssetHistory } from '../../services/assetHistoryService'
 import { getUsers } from '../../services/userService'
 import { getRecommendationSummary } from '../../services/aiRecommendationService'
+import { usePolling } from '../../hooks/usePolling'
 
 // ── Count-up hook ─────────────────────────────────────────────────────────────
 function useCountUp(target, active) {
@@ -737,16 +738,18 @@ function Dashboard() {
   const [aiSummary, setAiSummary] = useState([])
   const [activityRange, setActivityRange] = useState('week')
 
-  const load = useCallback(() => {
-    setLoading(true)
-    setError(false)
+  const load = useCallback(({ silent = false } = {}) => {
+    if (!silent) { setLoading(true); setError(false) }
     Promise.all([
       getAssets().catch(() => null),
       getAssetHistory().catch(() => null),
       getUsers().catch(() => null),
       getRecommendationSummary().catch(() => null),
     ]).then(([assetRes, histRes, userRes, aiRes]) => {
-      if (!assetRes && !histRes && !userRes) { setError(true); setLoading(false); return }
+      if (!assetRes && !histRes && !userRes) {
+        if (!silent) { setError(true); setLoading(false) }
+        return
+      }
       const a = assetRes?.data ?? []
       const h = histRes?.data  ?? []
       const u = userRes?.data  ?? []
@@ -755,11 +758,13 @@ function Dashboard() {
       setHistory(h)
       setUserCount(u.length)
       setAiSummary(aiRes?.data ?? [])
-      setLoading(false)
+      if (!silent) setLoading(false)
     })
   }, [dispatch])
 
   useEffect(() => { load() }, [load])
+
+  usePolling(() => load({ silent: true }), 30000)
 
   // ── Derived analytics ──────────────────────────────────────────────────────
   const totalAssets = assets.length

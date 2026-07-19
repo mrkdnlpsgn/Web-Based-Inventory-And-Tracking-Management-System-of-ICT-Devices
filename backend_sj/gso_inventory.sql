@@ -1061,7 +1061,7 @@ CREATE TABLE `deleted_assets` (
   `unit_value` decimal(12,2) NOT NULL,
   `office_id` bigint(20) NOT NULL,
   `office_name` varchar(100) NOT NULL COMMENT 'Snapshot of office name at deletion',
-  `accountable_person_name` varchar(150) NOT NULL COMMENT 'Snapshot of accountable person name',
+  `accountable_person_name` varchar(150) DEFAULT NULL COMMENT 'Snapshot of accountable person name',
   `location` varchar(150) NOT NULL,
   `condition` enum('SERVICEABLE','REPAIRABLE','UNSERVICEABLE') NOT NULL,
   `lifecycle_status` varchar(30) NOT NULL,

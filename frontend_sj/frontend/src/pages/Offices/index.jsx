@@ -188,8 +188,8 @@ function Offices() {
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
                 {filtered.map((office) => (
                   <tr key={office.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors duration-100">
-                    <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white">{office.officeName}</td>
-                    <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs">
+                    <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">{office.officeName}</td>
+                    <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">
                       {office.headUser ? (office.headUser.fullName || office.headUser.username) : '—'}
                     </td>
                     <td className="px-5 py-3.5">
