@@ -6,6 +6,7 @@ import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/main_shell.dart';
 import '../../../shared/widgets/auto_refresh_ticker.dart';
+import '../../../shared/widgets/app_search_field.dart';
 import '../model/deleted_asset_model.dart';
 import '../model/deleted_maintenance_model.dart';
 import '../model/deleted_disposal_model.dart';
@@ -58,8 +59,16 @@ class _RecycleBinTab<T> extends ConsumerStatefulWidget {
   final AutoDisposeFutureProvider<List<T>> provider;
   final Widget Function(BuildContext, WidgetRef, T) itemBuilder;
   final String emptyMessage;
+  final String searchHint;
+  final bool Function(T, String) matches;
 
-  const _RecycleBinTab({required this.provider, required this.itemBuilder, required this.emptyMessage});
+  const _RecycleBinTab({
+    required this.provider,
+    required this.itemBuilder,
+    required this.emptyMessage,
+    required this.searchHint,
+    required this.matches,
+  });
 
   @override
   ConsumerState<_RecycleBinTab<T>> createState() => _RecycleBinTabState<T>();
@@ -67,6 +76,14 @@ class _RecycleBinTab<T> extends ConsumerStatefulWidget {
 
 class _RecycleBinTabState<T> extends ConsumerState<_RecycleBinTab<T>> {
   List<T>? _lastItems;
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,28 +91,56 @@ class _RecycleBinTabState<T> extends ConsumerState<_RecycleBinTab<T>> {
     if (async.hasValue) _lastItems = async.value;
     final items = _lastItems;
 
+    final searchBar = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: AppSearchField(
+        controller: _searchCtrl,
+        hintText: widget.searchHint,
+        onChanged: (v) => setState(() => _search = v),
+      ),
+    );
+
     if (items == null) {
-      return async.when(
-        loading: () => const ListSkeleton(),
-        error: (e, _) => ErrorState(message: e.toString(), onRetry: () => ref.invalidate(widget.provider)),
-        data: (_) => const SizedBox.shrink(), // unreachable: _lastItems would already be set
+      return Column(
+        children: [
+          searchBar,
+          Expanded(
+            child: async.when(
+              loading: () => const ListSkeleton(),
+              error: (e, _) => ErrorState(message: e.toString(), onRetry: () => ref.invalidate(widget.provider)),
+              data: (_) => const SizedBox.shrink(), // unreachable: _lastItems would already be set
+            ),
+          ),
+        ],
       );
     }
 
-    if (items.isEmpty) {
-      return Center(
-        child: Text(widget.emptyMessage, style: TextStyle(color: context.colors.textTertiary)),
-      );
-    }
-    return RefreshIndicator(
-      color: AppTheme.brand,
-      onRefresh: () async => ref.invalidate(widget.provider),
-      child: ListView.separated(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + context.mainShellBottomInset),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, i) => widget.itemBuilder(context, ref, items[i]),
-      ),
+    final q = _search.trim().toLowerCase();
+    final filtered = q.isEmpty ? items : items.where((item) => widget.matches(item, q)).toList();
+
+    return Column(
+      children: [
+        searchBar,
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    items.isEmpty ? widget.emptyMessage : 'No records match your search.',
+                    style: TextStyle(color: context.colors.textTertiary),
+                  ),
+                )
+              : RefreshIndicator(
+                  color: AppTheme.brand,
+                  onRefresh: () async => ref.invalidate(widget.provider),
+                  child: ListView.separated(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + context.mainShellBottomInset),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) => widget.itemBuilder(context, ref, filtered[i]),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
@@ -229,6 +274,12 @@ class _AssetsTab extends StatelessWidget {
     return _RecycleBinTab<DeletedAssetModel>(
       provider: deletedAssetsProvider,
       emptyMessage: 'No deleted assets.',
+      searchHint: 'Search by device name or property number...',
+      matches: (a, q) =>
+          a.description.toLowerCase().contains(q) ||
+          a.propertyNumber.toLowerCase().contains(q) ||
+          a.categoryName.toLowerCase().contains(q) ||
+          a.officeName.toLowerCase().contains(q),
       itemBuilder: (context, ref, a) => _RecycleBinCard(
         propertyNumber: a.propertyNumber,
         description: a.description,
@@ -257,6 +308,10 @@ class _MaintenanceTab extends StatelessWidget {
     return _RecycleBinTab<DeletedMaintenanceModel>(
       provider: deletedMaintenanceProvider,
       emptyMessage: 'No deleted maintenance records.',
+      searchHint: 'Search by device name or property number...',
+      matches: (m, q) =>
+          m.assetDescription.toLowerCase().contains(q) ||
+          m.propertyNumber.toLowerCase().contains(q),
       itemBuilder: (context, ref, m) => _RecycleBinCard(
         propertyNumber: m.propertyNumber,
         description: m.assetDescription,
@@ -285,6 +340,10 @@ class _DisposalTab extends StatelessWidget {
     return _RecycleBinTab<DeletedDisposalModel>(
       provider: deletedDisposalProvider,
       emptyMessage: 'No deleted disposal records.',
+      searchHint: 'Search by device name or property number...',
+      matches: (d, q) =>
+          d.assetDescription.toLowerCase().contains(q) ||
+          d.propertyNumber.toLowerCase().contains(q),
       itemBuilder: (context, ref, d) => _RecycleBinCard(
         propertyNumber: d.propertyNumber,
         description: d.assetDescription,
