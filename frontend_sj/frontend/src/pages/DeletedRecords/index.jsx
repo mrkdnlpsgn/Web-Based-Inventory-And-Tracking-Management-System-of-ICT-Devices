@@ -24,6 +24,8 @@ const DISPOSAL_METHOD_BADGE = {
   DONATION: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20',
   TRANSFER: 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20',
 }
+const PAGE_SIZE = 8
+
 const DISPOSAL_STATUS_BADGE = {
   PENDING:   'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20',
   APPROVED:  'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20',
@@ -56,6 +58,7 @@ function DeletedTab({ fetcher, restoreFn, columns, matches, emptyMessage, record
   const [search, setSearch]   = useState('')
   const [restoring, setRestoring] = useState(null) // row pending confirmation
   const [busyId, setBusyId]       = useState(null) // row currently being restored
+  const [page, setPage]           = useState(1)
   const debouncedSearch       = useDebounce(search)
 
   useEffect(() => {
@@ -79,6 +82,11 @@ function DeletedTab({ fetcher, restoreFn, columns, matches, emptyMessage, record
     if (!q) return rows
     return rows.filter((r) => matches(r, q))
   }, [rows, debouncedSearch, matches])
+
+  useEffect(() => { setPage(1) }, [debouncedSearch])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const handleRestore = async () => {
     const row = restoring
@@ -152,7 +160,7 @@ function DeletedTab({ fetcher, restoreFn, columns, matches, emptyMessage, record
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
-              {filtered.map((row) => (
+              {paged.map((row) => (
                 <tr key={row.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-800/40 transition-colors duration-100">
                   {columns.map((col) => (
                     <td key={col.key} className="px-5 py-3.5 text-slate-600 dark:text-zinc-300 whitespace-nowrap">
@@ -176,6 +184,21 @@ function DeletedTab({ fetcher, restoreFn, columns, matches, emptyMessage, record
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && filtered.length > PAGE_SIZE && (
+        <div className="px-5 py-3 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-400 dark:text-zinc-500">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Prev</button>
+            <span className="text-xs text-slate-400 px-2">{page} / {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Next</button>
+          </div>
         </div>
       )}
 

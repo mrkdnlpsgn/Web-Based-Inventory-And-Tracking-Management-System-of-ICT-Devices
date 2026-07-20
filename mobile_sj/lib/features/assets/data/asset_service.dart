@@ -32,6 +32,27 @@ class AssetService {
     }
   }
 
+  Future<int> count({
+    String? search,
+    int? categoryId,
+    int? officeId,
+    String? condition,
+    String? lifecycleStatus,
+  }) async {
+    try {
+      final res = await _dio.get('/assets/count', queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (categoryId != null) 'categoryId': categoryId,
+        if (officeId != null) 'officeId': officeId,
+        if (condition != null && condition.isNotEmpty) 'condition': condition,
+        if (lifecycleStatus != null && lifecycleStatus.isNotEmpty) 'lifecycleStatus': lifecycleStatus,
+      });
+      return res.data as int;
+    } catch (e) {
+      throw ApiException.from(e);
+    }
+  }
+
   Future<AssetModel> getById(int id) async {
     try {
       final res = await _dio.get('/assets/$id');

@@ -18,7 +18,8 @@ BEGIN
            u.account_locked_until AS accountLockedUntil,
            u.token_version AS tokenVersion,
            u.must_change_password AS mustChangePassword,
-           u.privacy_acknowledged_at AS privacyAcknowledgedAt
+           u.privacy_acknowledged_at AS privacyAcknowledgedAt,
+           u.two_factor_enabled AS twoFactorEnabled
     FROM users u
     WHERE LOWER(u.username) = LOWER(p_username);
 END $$
@@ -116,6 +117,57 @@ BEGIN
         password_reset_otp_expires_at = NULL,
         password_reset_otp_attempts = 0,
         token_version = token_version + 1
+    WHERE user_id = p_user_id;
+END $$
+
+-- Step 2 of login 2FA: store a fresh code for an account that passed the
+-- password check and has two_factor_enabled — mirrors sp_auth_set_password_reset_otp.
+DROP PROCEDURE IF EXISTS sp_auth_set_login_otp $$
+CREATE PROCEDURE sp_auth_set_login_otp(
+    IN p_user_id INT, IN p_otp_hash VARCHAR(255), IN p_expires_at DATETIME
+)
+BEGIN
+    UPDATE users
+    SET login_otp_hash = p_otp_hash,
+        login_otp_expires_at = p_expires_at,
+        login_otp_attempts = 0
+    WHERE user_id = p_user_id;
+END $$
+
+-- Step 3: fetch the pending login OTP plus everything needed to issue a session
+-- (token_version, role, etc.) so a successful verify can finish login in one
+-- more call without a second lookup.
+DROP PROCEDURE IF EXISTS sp_auth_get_login_otp $$
+CREATE PROCEDURE sp_auth_get_login_otp(IN p_username VARCHAR(50))
+BEGIN
+    SELECT user_id AS id, username, full_name AS fullName, `role`,
+           is_active AS isActive, token_version AS tokenVersion,
+           privacy_acknowledged_at AS privacyAcknowledgedAt,
+           login_otp_hash AS otpHash,
+           login_otp_expires_at AS otpExpiresAt,
+           login_otp_attempts AS otpAttempts
+    FROM users
+    WHERE LOWER(username) = LOWER(p_username);
+END $$
+
+DROP PROCEDURE IF EXISTS sp_auth_increment_login_otp_attempts $$
+CREATE PROCEDURE sp_auth_increment_login_otp_attempts(IN p_user_id INT)
+BEGIN
+    UPDATE users
+    SET login_otp_attempts = login_otp_attempts + 1
+    WHERE user_id = p_user_id;
+END $$
+
+-- Called once a login OTP has been consumed successfully — clears it so it
+-- can't be replayed, without touching anything else (unlike the forgot-password
+-- flow, nothing else needs to change here: no password/token_version bump).
+DROP PROCEDURE IF EXISTS sp_auth_clear_login_otp $$
+CREATE PROCEDURE sp_auth_clear_login_otp(IN p_user_id INT)
+BEGIN
+    UPDATE users
+    SET login_otp_hash = NULL,
+        login_otp_expires_at = NULL,
+        login_otp_attempts = 0
     WHERE user_id = p_user_id;
 END $$
 
@@ -413,6 +465,39 @@ BEGIN
     LIMIT p_limit OFFSET p_offset;
 END $$
 
+-- Mirrors sp_assets_list's filters minus LIMIT/OFFSET — backs a lightweight
+-- /count endpoint so the mobile app can show a true total without fetching
+-- every row (list screens paginate 20 at a time and never see a real total).
+DROP PROCEDURE IF EXISTS sp_assets_count $$
+CREATE PROCEDURE sp_assets_count(
+    IN p_search VARCHAR(255),
+    IN p_category_id INT, IN p_office_id INT,
+    IN p_condition VARCHAR(20), IN p_lifecycle_status VARCHAR(30)
+)
+BEGIN
+    SET p_search = TRIM(p_search);
+    SELECT COUNT(*) AS total
+    FROM assets a
+    LEFT JOIN categories c ON a.category_id = c.category_id
+    LEFT JOIN offices o ON a.office_id = o.office_id
+    WHERE a.is_deleted = FALSE
+      AND (
+        p_search IS NULL OR p_search = '' OR
+        a.property_number    LIKE CONCAT('%', p_search, '%')
+        OR a.`description`   LIKE CONCAT('%', p_search, '%')
+        OR a.accountable_person LIKE CONCAT('%', p_search, '%')
+        OR a.location        LIKE CONCAT('%', p_search, '%')
+        OR a.`condition`     LIKE CONCAT('%', p_search, '%')
+        OR a.lifecycle_status LIKE CONCAT('%', p_search, '%')
+        OR c.category_name   LIKE CONCAT('%', p_search, '%')
+        OR o.office_name     LIKE CONCAT('%', p_search, '%')
+      )
+      AND (p_category_id IS NULL OR a.category_id = p_category_id)
+      AND (p_office_id IS NULL OR a.office_id = p_office_id)
+      AND (p_condition IS NULL OR p_condition = '' OR a.`condition` = p_condition)
+      AND (p_lifecycle_status IS NULL OR p_lifecycle_status = '' OR a.lifecycle_status = p_lifecycle_status);
+END $$
+
 DROP PROCEDURE IF EXISTS sp_assets_get_by_id $$
 CREATE PROCEDURE sp_assets_get_by_id(IN p_id INT)
 BEGIN
@@ -658,6 +743,32 @@ BEGIN
     LIMIT p_limit OFFSET p_offset;
 END $$
 
+-- Mirrors sp_maintenance_list's filters minus LIMIT/OFFSET — see sp_assets_count.
+DROP PROCEDURE IF EXISTS sp_maintenance_count $$
+CREATE PROCEDURE sp_maintenance_count(
+    IN p_search VARCHAR(255),
+    IN p_maintenance_type VARCHAR(20), IN p_status VARCHAR(20)
+)
+BEGIN
+    SET p_search = TRIM(p_search);
+    SELECT COUNT(*) AS total
+    FROM maintenance_ledger m
+    LEFT JOIN assets a ON m.asset_id = a.asset_id
+    LEFT JOIN users r ON m.recorded_by = r.user_id
+    WHERE m.is_deleted = FALSE
+      AND (
+        p_search IS NULL OR p_search = '' OR
+        m.maintenance_type LIKE CONCAT('%', p_search, '%')
+        OR m.findings LIKE CONCAT('%', p_search, '%')
+        OR m.`status` LIKE CONCAT('%', p_search, '%')
+        OR a.property_number LIKE CONCAT('%', p_search, '%')
+        OR a.`description` LIKE CONCAT('%', p_search, '%')
+        OR r.full_name LIKE CONCAT('%', p_search, '%')
+      )
+      AND (p_maintenance_type IS NULL OR p_maintenance_type = '' OR m.maintenance_type = p_maintenance_type)
+      AND (p_status IS NULL OR p_status = '' OR m.`status` = p_status);
+END $$
+
 DROP PROCEDURE IF EXISTS sp_maintenance_get_by_id $$
 CREATE PROCEDURE sp_maintenance_get_by_id(IN p_id INT)
 BEGIN
@@ -858,6 +969,32 @@ BEGIN
       AND (p_disposal_status IS NULL OR p_disposal_status = '' OR d.disposal_status = p_disposal_status)
     ORDER BY d.inspection_date DESC
     LIMIT p_limit OFFSET p_offset;
+END $$
+
+-- Mirrors sp_disposal_list's filters minus LIMIT/OFFSET — see sp_assets_count.
+DROP PROCEDURE IF EXISTS sp_disposal_count $$
+CREATE PROCEDURE sp_disposal_count(
+    IN p_search VARCHAR(255),
+    IN p_recommended_method VARCHAR(20), IN p_disposal_status VARCHAR(20)
+)
+BEGIN
+    SET p_search = TRIM(p_search);
+    SELECT COUNT(*) AS total
+    FROM disposal_ledger d
+    LEFT JOIN assets a ON d.asset_id = a.asset_id
+    LEFT JOIN users r ON d.recorded_by = r.user_id
+    WHERE d.is_deleted = FALSE
+      AND (
+        p_search IS NULL OR p_search = '' OR
+        d.recommended_method LIKE CONCAT('%', p_search, '%')
+        OR d.disposal_status LIKE CONCAT('%', p_search, '%')
+        OR d.reason LIKE CONCAT('%', p_search, '%')
+        OR a.property_number LIKE CONCAT('%', p_search, '%')
+        OR a.`description` LIKE CONCAT('%', p_search, '%')
+        OR r.full_name LIKE CONCAT('%', p_search, '%')
+      )
+      AND (p_recommended_method IS NULL OR p_recommended_method = '' OR d.recommended_method = p_recommended_method)
+      AND (p_disposal_status IS NULL OR p_disposal_status = '' OR d.disposal_status = p_disposal_status);
 END $$
 
 DROP PROCEDURE IF EXISTS sp_disposal_get_by_id $$

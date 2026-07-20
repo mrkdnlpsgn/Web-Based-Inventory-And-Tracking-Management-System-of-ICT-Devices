@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../data/auth_service.dart';
 import '../provider/auth_provider.dart';
 import 'force_change_password_screen.dart';
+import 'two_factor_screen.dart';
 import '../../../core/router/page_transitions.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -42,6 +43,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ForceChangePasswordScreen(
           identifier: identifier,
           currentPassword: password,
+        ),
+      ));
+      return;
+    }
+    if (error is RequiresTwoFactor) {
+      ref.read(authProvider.notifier).clearError();
+      await Navigator.of(context).push(fadeThroughRoute(
+        TwoFactorScreen(
+          identifier: identifier,
+          password: password,
         ),
       ));
       return;

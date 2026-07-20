@@ -83,6 +83,11 @@ public class AssetService {
             search, size, page * size, categoryId, officeId, condition, lifecycleStatus);
     }
 
+    public long count(String search, Long categoryId, Long officeId, String condition, String lifecycleStatus) {
+        return jdbcTemplate.queryForObject("CALL sp_assets_count(?, ?, ?, ?, ?)", Long.class,
+            search, categoryId, officeId, condition, lifecycleStatus);
+    }
+
     public Asset findById(Long id) {
         List<Asset> list = jdbcTemplate.query("CALL sp_assets_get_by_id(?)", ASSET_MAPPER, id);
         if (list.isEmpty()) throw new ResourceNotFoundException("Asset not found: " + id);

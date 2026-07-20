@@ -10,7 +10,9 @@ import { getOffices, createOffice, updateOffice, deleteOffice } from '../../serv
 import { getUsers } from '../../services/userService'
 import { newIdempotencyKey } from '../../utils/idempotency'
 
-const INPUT_CLASS = 'w-full rounded-md border border-slate-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150'
+const PAGE_SIZE = 8
+
+const INPUT_CLASS ='w-full rounded-md border border-slate-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all duration-150'
 
 function OfficeModal({ onClose, onSave, initial = null }) {
   const isEditing = !!initial
@@ -90,6 +92,7 @@ function Offices() {
   const [editing, setEditing]   = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [blockedDelete, setBlockedDelete] = useState(null)
+  const [page, setPage]         = useState(1)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -106,6 +109,7 @@ function Offices() {
   }, [toast])
 
   useEffect(() => { fetchOffices(debouncedSearch) }, [debouncedSearch, fetchOffices])
+  useEffect(() => { setPage(1) }, [debouncedSearch])
 
   const handleCreate = async (payload, idempotencyKey) => {
     const { data } = await createOffice(payload, idempotencyKey)
@@ -136,6 +140,8 @@ function Offices() {
   }
 
   const filtered = offices
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <MainLayout>
@@ -192,7 +198,7 @@ function Offices() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
-                {filtered.map((office) => (
+                {paged.map((office) => (
                   <tr key={office.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors duration-100">
                     <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">{office.officeName}</td>
                     <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">
@@ -218,6 +224,21 @@ function Offices() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div className="px-5 py-3 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-400 dark:text-zinc-500">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Prev</button>
+              <span className="text-xs text-slate-400 px-2">{page} / {totalPages}</span>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
           </div>
         )}
       </div>

@@ -33,6 +33,15 @@ public class AssetController {
         return assetService.findAll(search, page, size, categoryId, officeId, condition, lifecycleStatus);
     }
 
+    @GetMapping("/count")
+    public long count(@RequestParam(required = false) String search,
+                       @RequestParam(required = false) Long categoryId,
+                       @RequestParam(required = false) Long officeId,
+                       @RequestParam(required = false) String condition,
+                       @RequestParam(required = false) String lifecycleStatus) {
+        return assetService.count(search, categoryId, officeId, condition, lifecycleStatus);
+    }
+
     @GetMapping("/{id}")
     public Asset getById(@PathVariable Long id) { return assetService.findById(id); }
 

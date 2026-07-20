@@ -59,11 +59,26 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
   Widget build(BuildContext context) {
     final search = ref.watch(assetSearchProvider);
     final state = ref.watch(assetsPagedProvider(search));
+    final countAsync = ref.watch(assetCountProvider(search));
     final filtersActive = assetFiltersActive(ref);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Assets'),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Assets'),
+            Text(
+              countAsync.when(
+                data: (c) => '$c ${c == 1 ? 'record' : 'records'}',
+                loading: () => ' ',
+                error: (_, __) => ' ',
+              ),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal, color: context.colors.textSecondary),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: AnimatedSwitcher(
@@ -84,7 +99,10 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
           if (isDesktopPlatform)
             IconButton(
               icon: const Icon(Icons.refresh_rounded),
-              onPressed: () => ref.invalidate(assetsPagedProvider(search)),
+              onPressed: () {
+                ref.invalidate(assetsPagedProvider(search));
+                ref.invalidate(assetCountProvider(search));
+              },
             ),
           PopupMenuButton<String>(
             icon: _exporting
@@ -96,7 +114,10 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
                 await _export();
               } else if (value == 'import') {
                 final result = await context.push<bool>('/assets/import');
-                if (result == true) ref.invalidate(assetsPagedProvider(search));
+                if (result == true) {
+                  ref.invalidate(assetsPagedProvider(search));
+                  ref.invalidate(assetCountProvider(search));
+                }
               }
             },
             itemBuilder: (context) => const [
@@ -128,7 +149,10 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
           child: const Icon(Icons.add_rounded, color: Colors.white),
           onPressed: () async {
             final result = await context.push<bool>('/assets/new');
-            if (result == true) ref.invalidate(assetsPagedProvider(search));
+            if (result == true) {
+              ref.invalidate(assetsPagedProvider(search));
+              ref.invalidate(assetCountProvider(search));
+            }
           },
         ),
       ),
@@ -140,7 +164,10 @@ class _AssetListScreenState extends ConsumerState<AssetListScreen> {
           emptyMessage: 'No assets found.',
           extraBottomPadding: context.mainShellBottomInset,
           onLoadMore: () => ref.read(assetsPagedProvider(search).notifier).loadMore(),
-          onRefresh: () => ref.read(assetsPagedProvider(search).notifier).refresh(),
+          onRefresh: () async {
+            ref.invalidate(assetCountProvider(search));
+            await ref.read(assetsPagedProvider(search).notifier).refresh();
+          },
           itemBuilder: (context, asset, i) => _AssetCard(
             asset: asset,
             onTap: () => context.push('/assets/${asset.id}'),

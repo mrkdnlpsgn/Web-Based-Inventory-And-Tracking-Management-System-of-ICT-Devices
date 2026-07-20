@@ -66,8 +66,9 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             record(writeBucket, ip);
         }
 
-        // Tier 3: login brute-force limit
-        if (uri.equals("/api/auth/login") && method.equals("POST")) {
+        // Tier 3: login brute-force limit — also covers verify-otp so guessing the
+        // emailed 2FA code is bounded the same way guessing a password is.
+        if ((uri.equals("/api/auth/login") || uri.equals("/api/auth/login/verify-otp")) && method.equals("POST")) {
             long authWindowMs = authWindowMinutes * 60_000L;
             if (isExceeded(authBucket, ip, authMax, authWindowMs)) {
                 reject(response, "Too many login attempts. Please wait " + authWindowMinutes + " minutes and try again.",

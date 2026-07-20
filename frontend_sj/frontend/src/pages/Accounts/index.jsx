@@ -39,6 +39,7 @@ const MODULE_STYLES = {
 
 const ALL_MODULES  = ['ALL', 'ASSET', 'MAINTENANCE', 'DISPOSAL', 'USER']
 const ALL_ACTIONS  = ['ALL', 'CREATE', 'UPDATE', 'DELETE']
+const AUDIT_PAGE_SIZE = 8
 
 // ── Accounts tab ──────────────────────────────────────────────────────────────
 function AccountsTab() {
@@ -288,6 +289,7 @@ function AuditLogsTab() {
   const [moduleFilter, setModuleFilter] = useState('ALL')
   const [actionFilter, setActionFilter] = useState('ALL')
   const [search, setSearch]             = useState('')
+  const [page, setPage]                 = useState(1)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -312,6 +314,11 @@ function AuditLogsTab() {
     if (actionFilter !== 'ALL' && l.action !== actionFilter) return false
     return true
   })
+
+  useEffect(() => { setPage(1) }, [debouncedSearch, moduleFilter, actionFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / AUDIT_PAGE_SIZE))
+  const paged = filtered.slice((page - 1) * AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE)
 
   return (
     <div className="space-y-4">
@@ -397,7 +404,7 @@ function AuditLogsTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
-                {filtered.map((log) => {
+                {paged.map((log) => {
                   const aStyle = ACTION_STYLES[log.action] || { bg: 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300', label: log.action }
                   const mStyle = MODULE_STYLES[log.module] || { bg: 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300' }
                   return (
@@ -425,6 +432,21 @@ function AuditLogsTab() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && filtered.length > AUDIT_PAGE_SIZE && (
+          <div className="px-5 py-3 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-400 dark:text-zinc-500">
+              {(page - 1) * AUDIT_PAGE_SIZE + 1}–{Math.min(page * AUDIT_PAGE_SIZE, filtered.length)} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Prev</button>
+              <span className="text-xs text-slate-400 px-2">{page} / {totalPages}</span>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
           </div>
         )}
       </div>
