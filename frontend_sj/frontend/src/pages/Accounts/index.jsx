@@ -159,14 +159,15 @@ function AccountsTab() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName || user.username}</p>
-                    <p className="text-xs text-slate-400 dark:text-zinc-500 truncate mt-0.5">@{user.username} · {user.officeName || 'No office'}</p>
+                    <p className="text-xs text-slate-400 dark:text-zinc-500 truncate mt-0.5">@{user.username}</p>
                     <p className={`text-xs truncate mt-0.5 ${user.email ? 'text-slate-400 dark:text-zinc-500' : 'text-amber-500 dark:text-amber-400 italic'}`}>
                       {user.email || 'No email on file (forgot-password unavailable)'}
                     </p>
                     <div className="mt-1.5 flex items-center gap-1.5">
-                      <Badge variant={user.role === 'ADMIN' ? 'brand' : 'default'}>
-                        {user.role === 'ADMIN' ? 'Administrator' : 'Staff'}
-                      </Badge>
+                      <Badge
+                        label={user.role === 'ADMIN' ? 'Administrator' : 'Staff'}
+                        color={user.role === 'ADMIN' ? 'green' : 'gray'}
+                      />
                       {!user.isActive && (
                         <span className="text-xs text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded-full">Inactive</span>
                       )}
@@ -200,7 +201,7 @@ function AccountsTab() {
               <table className="min-w-full text-sm divide-y divide-slate-100 dark:divide-zinc-800">
                 <thead>
                   <tr>
-                    {['Username', 'Email', 'Full Name', 'Role', 'Office', 'Active', ''].map((h) => (
+                    {['Username', 'Email', 'Full Name', 'Role', 'Active', ''].map((h) => (
                       <th key={h} className="px-5 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -223,11 +224,11 @@ function AccountsTab() {
                       </td>
                       <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">{user.fullName || '—'}</td>
                       <td className="px-5 py-3.5">
-                        <Badge variant={user.role === 'ADMIN' ? 'brand' : 'default'}>
-                          {user.role === 'ADMIN' ? 'Administrator' : 'Staff'}
-                        </Badge>
+                        <Badge
+                          label={user.role === 'ADMIN' ? 'Administrator' : 'Staff'}
+                          color={user.role === 'ADMIN' ? 'green' : 'gray'}
+                        />
                       </td>
-                      <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 text-xs whitespace-nowrap">{user.officeName || '—'}</td>
                       <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${user.isActive ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10' : 'text-slate-400 dark:text-zinc-600 bg-slate-100 dark:bg-zinc-800'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />

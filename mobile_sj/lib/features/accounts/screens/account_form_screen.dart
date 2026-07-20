@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../model/account_model.dart';
 import '../data/account_service.dart';
-import '../../assets/model/asset_model.dart';
-import '../../../shared/provider/reference_provider.dart';
 import '../../../shared/widgets/delete_dialog.dart';
 import '../widgets/reset_password_dialog.dart';
 import '../../../core/theme/app_theme.dart';
@@ -192,7 +190,6 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final officesAsync = ref.watch(officesProvider);
     final isSelf = _isEdit && widget.account!.username == ref.watch(authProvider).value?.username;
 
     return Scaffold(
@@ -219,12 +216,9 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
           ],
         ],
       ),
-      body: officesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.brand)),
-        error: (e, _) => Center(child: Text(e.toString())),
-        data: (offices) => Form(
-          key: _formKey,
-          child: ListView(
+      body: Form(
+        key: _formKey,
+        child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
               if (isSelf)
@@ -304,14 +298,9 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
                 itemLabel: (r) => r,
                 onChanged: (r) => setState(() => _role = r!),
               ),
-              _dropdown<OfficeModel?>(
-                label: 'Office (optional)',
-                value: offices.where((o) => o.id == _officeId).firstOrNull,
-                items: [null, ...offices],
-                itemLabel: (o) => o?.officeName ?? 'None',
-                onChanged: (o) => setState(() => _officeId = o?.id),
-                requireValue: false,
-              ),
+              // No office field here at all — matches the web app's account form,
+              // which has never had one. Office assignment isn't part of an
+              // account's identity in this app.
               // No Active/Inactive control here — that's handled by the dedicated
               // Deactivate/Reactivate button in the AppBar (edit mode only). New
               // accounts are always created active.
@@ -330,7 +319,6 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
