@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
 import '../model/asset_model.dart';
+import '../model/asset_import_result.dart';
 
 class AssetService {
   final Dio _dio = ApiClient.instance.dio;
@@ -63,6 +64,17 @@ class AssetService {
     try {
       await _dio.delete('/assets/$id',
           data: reason != null ? {'deleteReason': reason} : null);
+    } catch (e) {
+      throw ApiException.from(e);
+    }
+  }
+
+  // Create-only bulk import — see AssetImportRow.java for the exact field
+  // names each row map must use.
+  Future<AssetImportResult> bulkImport(List<Map<String, String>> rows) async {
+    try {
+      final res = await _dio.post('/assets/bulk-import', data: rows);
+      return AssetImportResult.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw ApiException.from(e);
     }

@@ -1,0 +1,92 @@
+name: CI
+
+# Runs on every push and every PR into main — build + boot-test the backend
+# against a real MySQL schema, and build the frontend. No deployment step yet;
+# this is CI only.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (build + test)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend_sj/pom.xml
+
+      # Server's own default collation (utf8mb4_0900_ai_ci) doesn't match this
+      # schema (utf8mb4_general_ci throughout) — create the DB with the matching
+      # collation up front rather than hit "Illegal mix of collations" on every
+      # stored-procedure string comparison (see backend_sj/rename_seed_property_numbers.sql
+      # and cleanup_seed_2000_assets.sql for the same issue hit and fixed manually).
+      - name: Load schema into MySQL
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y mysql-client
+          mysql -h127.0.0.1 -P3306 -uroot -proot -e \
+            "CREATE DATABASE IF NOT EXISTS sj_gso_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          mysql -h127.0.0.1 -P3306 -uroot -proot sj_gso_inventory < backend_sj/gso_inventory.sql
+          mysql -h127.0.0.1 -P3306 -uroot -proot sj_gso_inventory < backend_sj/stored_procedures.sql
+
+      # mvnw is committed with CRLF line endings and non-executable mode (authored
+      # on Windows) — same fix backend_sj/Dockerfile already applies for its build.
+      - name: Fix mvnw line endings and permissions
+        working-directory: backend_sj
+        run: |
+          sed -i 's/\r$//' mvnw
+          chmod +x mvnw
+
+      # Using SPRING_DATASOURCE_* (same vars docker-compose.yml already relies on)
+      # instead of the app's custom DB_URL/${DB_URL:default} placeholder — these
+      # bind directly to spring.datasource.* via Spring Boot's relaxed env
+      # binding, no indirection through application.properties' nested
+      # placeholder resolution to go wrong.
+      - name: Build and test
+        working-directory: backend_sj
+        env:
+          SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/sj_gso_inventory?connectionCollation=utf8mb4_general_ci
+          SPRING_DATASOURCE_USERNAME: root
+          SPRING_DATASOURCE_PASSWORD: root
+        run: ./mvnw -B clean verify
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend_sj/frontend/package-lock.json
+
+      - name: Install and build
+        working-directory: frontend_sj/frontend
+        run: |
+          npm ci
+          npm run build

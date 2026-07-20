@@ -9,6 +9,7 @@ import '../../../shared/widgets/skeleton.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
 import '../../../shared/widgets/main_shell.dart';
 import '../../../shared/widgets/auto_refresh_ticker.dart';
+import '../../../shared/widgets/logout_dialog.dart';
 import '../../assets/provider/ai_recommendation_provider.dart';
 import '../../audit_log/provider/audit_log_digest_provider.dart';
 import '../provider/dashboard_provider.dart';
@@ -44,10 +45,10 @@ class DashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Logout',
-            // No confirmation — signing out isn't destructive or irreversible
-            // (logging back in undoes it instantly), so a dialog here would
-            // just be a tap users learn to click through without reading.
-            onPressed: () => ref.read(authProvider.notifier).logout(),
+            onPressed: () async {
+              final confirmed = await showLogoutDialog(context);
+              if (confirmed == true) ref.read(authProvider.notifier).logout();
+            },
           ),
         ],
       ),
@@ -109,10 +110,32 @@ class DashboardScreen extends ConsumerWidget {
               onTap: () => context.push('/reports'),
             ),
           ),
+          const SizedBox(height: 10),
+          StaggeredEntrance(
+            index: 3,
+            child: _NavCard(
+              icon: Icons.category_outlined,
+              title: 'Categories',
+              subtitle: 'Manage asset categories',
+              color: AppTheme.brand,
+              onTap: () => context.push('/categories'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          StaggeredEntrance(
+            index: 4,
+            child: _NavCard(
+              icon: Icons.apartment_outlined,
+              title: 'Offices',
+              subtitle: 'Manage offices and their head users',
+              color: AppTheme.brand,
+              onTap: () => context.push('/offices'),
+            ),
+          ),
           if (isAdmin) ...[
             const SizedBox(height: 10),
             StaggeredEntrance(
-              index: 3,
+              index: 5,
               child: _NavCard(
                 icon: Icons.manage_accounts_outlined,
                 title: 'Manage Accounts',
@@ -124,7 +147,7 @@ class DashboardScreen extends ConsumerWidget {
           ],
           const SizedBox(height: 10),
           StaggeredEntrance(
-            index: 4,
+            index: 6,
             child: _NavCard(
               icon: Icons.restore_from_trash_outlined,
               title: 'Recycle Bin',

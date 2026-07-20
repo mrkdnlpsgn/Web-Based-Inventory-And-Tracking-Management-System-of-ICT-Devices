@@ -1,6 +1,7 @@
 package com.sanjose.inventory.service;
 
 import com.sanjose.inventory.config.SpHelper;
+import com.sanjose.inventory.dto.AssetImportRow;
 import com.sanjose.inventory.dto.AssetRequest;
 import com.sanjose.inventory.entity.Asset;
 import com.sanjose.inventory.entity.Category;
@@ -13,10 +14,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -107,6 +114,112 @@ public class AssetService {
         auditLogService.log("ASSET_CREATED", "Assets", newId, "asset",
             "Created asset: " + saved.getPropertyNumber());
         return findById(newId); // re-fetch after potential lifecycle update
+    }
+
+    private static final Set<String> VALID_CONDITIONS = Set.of("SERVICEABLE", "REPAIRABLE", "UNSERVICEABLE");
+
+    // Create-only bulk import (spreadsheet → assets). Each row is validated and
+    // saved independently — one bad row (unknown category, bad date, etc.) is
+    // reported as a failure without aborting the rest of the batch. Runs inside
+    // this service's class-level @Transactional, but since every failure is
+    // caught here rather than propagated, a partial batch commits normally
+    // instead of rolling back the whole import over one bad row.
+    public Map<String, Object> bulkImport(List<AssetImportRow> rows) {
+        List<Asset> saved = new ArrayList<>();
+        List<Map<String, Object>> failed = new ArrayList<>();
+
+        for (AssetImportRow row : rows) {
+            try {
+                saved.add(create(toAssetRequest(row)));
+            } catch (Exception e) {
+                Map<String, Object> failure = new LinkedHashMap<>();
+                failure.put("row", row);
+                failure.put("reason", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+                failed.add(failure);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("saved", saved);
+        result.put("failed", failed);
+        return result;
+    }
+
+    private AssetRequest toAssetRequest(AssetImportRow row) {
+        if (isBlank(row.getDescription())) throw new IllegalArgumentException("Description is required.");
+        if (isBlank(row.getCategoryName())) throw new IllegalArgumentException("Category is required.");
+        if (isBlank(row.getOfficeName())) throw new IllegalArgumentException("Location is required.");
+        if (isBlank(row.getAccountablePerson())) throw new IllegalArgumentException("Accountable person is required.");
+        if (isBlank(row.getPhysicalCount())) throw new IllegalArgumentException("Physical count is required.");
+        if (isBlank(row.getAcquisitionDate())) throw new IllegalArgumentException("Acquisition date is required.");
+        if (isBlank(row.getUnitValue())) throw new IllegalArgumentException("Unit value is required.");
+        if (isBlank(row.getLocation())) throw new IllegalArgumentException("Physical location is required.");
+        if (isBlank(row.getCondition())) throw new IllegalArgumentException("Condition is required.");
+
+        String condition = row.getCondition().trim().toUpperCase();
+        if (!VALID_CONDITIONS.contains(condition)) {
+            throw new IllegalArgumentException(
+                "Unknown condition \"" + row.getCondition() + "\" — must be SERVICEABLE, REPAIRABLE, or UNSERVICEABLE.");
+        }
+
+        Long categoryId = resolveCategoryId(row.getCategoryName());
+        if (categoryId == null) throw new IllegalArgumentException("Unknown category: \"" + row.getCategoryName() + "\"");
+        Long officeId = resolveOfficeId(row.getOfficeName());
+        if (officeId == null) throw new IllegalArgumentException("Unknown office: \"" + row.getOfficeName() + "\"");
+
+        AssetRequest req = new AssetRequest();
+        req.setDescription(row.getDescription().trim());
+        req.setCategoryId(categoryId);
+        req.setOfficeId(officeId);
+        req.setAccountablePerson(row.getAccountablePerson().trim());
+        req.setLocation(row.getLocation().trim());
+        req.setCondition(condition);
+        req.setRemarks(isBlank(row.getRemarks()) ? null : row.getRemarks().trim());
+
+        req.setQuantity(isBlank(row.getQuantity()) ? 1 : parseInt(row.getQuantity(), "Qty (Property Card)"));
+        req.setPhysicalCount(parseInt(row.getPhysicalCount(), "Qty (Physical Count)"));
+        req.setUnitValue(parseDecimal(row.getUnitValue(), "Unit Value"));
+
+        try {
+            req.setAcquisitionDate(LocalDate.parse(row.getAcquisitionDate().trim()));
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException(
+                "Acquisition date \"" + row.getAcquisitionDate() + "\" must be in YYYY-MM-DD format.");
+        }
+
+        return req;
+    }
+
+    private boolean isBlank(String s) { return s == null || s.isBlank(); }
+
+    private Integer parseInt(String raw, String fieldLabel) {
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(fieldLabel + " \"" + raw + "\" must be a whole number.");
+        }
+    }
+
+    private BigDecimal parseDecimal(String raw, String fieldLabel) {
+        try {
+            return new BigDecimal(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(fieldLabel + " \"" + raw + "\" must be a number.");
+        }
+    }
+
+    private Long resolveCategoryId(String name) {
+        List<Long> ids = jdbcTemplate.query(
+            "SELECT category_id FROM categories WHERE LOWER(category_name) = LOWER(?)",
+            (rs, rn) -> rs.getLong(1), name.trim());
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private Long resolveOfficeId(String name) {
+        List<Long> ids = jdbcTemplate.query(
+            "SELECT office_id FROM offices WHERE LOWER(office_name) = LOWER(?)",
+            (rs, rn) -> rs.getLong(1), name.trim());
+        return ids.isEmpty() ? null : ids.get(0);
     }
 
     public Asset update(Long id, AssetRequest req) {

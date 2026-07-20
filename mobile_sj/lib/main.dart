@@ -9,8 +9,8 @@ import 'shared/widgets/offline_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiClient.instance.init();
   final prefs = await SharedPreferences.getInstance();
+  await ApiClient.instance.init(prefs);
   runApp(
     ProviderScope(
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],

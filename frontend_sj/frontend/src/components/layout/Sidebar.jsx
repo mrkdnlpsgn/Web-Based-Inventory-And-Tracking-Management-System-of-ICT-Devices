@@ -142,6 +142,15 @@ const systemNavItems = [
       </svg>
     ),
   },
+  {
+    to: '/privacy',
+    label: 'Privacy, Terms & Conditions',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-[18px] w-[18px] flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 1L3 5v6c0 5.25 3.5 8.75 7 9.5 3.5-.75 7-4.25 7-9.5V5l-7-4zm-1.5 12.5L5 10l1.4-1.4 2.1 2.1 4.1-4.1L14 8l-5.5 5.5z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
 ]
 
 // Account management is the one area that stays ADMIN-exclusive.
@@ -336,7 +345,7 @@ function Sidebar({ isCollapsed, onToggle, onHelp, isMobileOpen, onMobileClose })
           to="/privacy"
           className="text-2xs text-slate-400 dark:text-zinc-600 hover:text-brand-500 dark:hover:text-brand-400 mt-1.5 inline-block transition-colors duration-150"
         >
-          Privacy Notice
+          Privacy, Terms & Conditions
         </NavLink>
         {onHelp && (
           <button

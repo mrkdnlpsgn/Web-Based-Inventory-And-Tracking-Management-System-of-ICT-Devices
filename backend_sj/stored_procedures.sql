@@ -313,8 +313,12 @@ CREATE PROCEDURE sp_users_create(
     OUT p_id INT
 )
 BEGIN
-    INSERT INTO users(username, email, password_hash, full_name, `role`, office_id, is_active, created_at)
-    VALUES(p_username, NULLIF(p_email, ''), p_password_hash, p_full_name, p_role, NULLIF(p_office_id, 0), p_is_active, NOW());
+    -- token_version has no column default and is NOT NULL — must be set
+    -- explicitly or every new-user INSERT fails outright. 0 is the same
+    -- starting value JwtUtil/AuthService already assume for a user with no
+    -- recorded version (see login()'s `tokenVersion() != null ? ... : 0`).
+    INSERT INTO users(username, email, password_hash, full_name, `role`, office_id, is_active, token_version, created_at)
+    VALUES(p_username, NULLIF(p_email, ''), p_password_hash, p_full_name, p_role, NULLIF(p_office_id, 0), p_is_active, 0, NOW());
     SET p_id = LAST_INSERT_ID();
 END $$
 

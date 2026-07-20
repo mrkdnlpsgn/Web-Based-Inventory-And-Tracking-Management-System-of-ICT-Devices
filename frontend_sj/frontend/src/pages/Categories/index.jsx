@@ -4,6 +4,7 @@ import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import AlertDialog from '../../components/common/AlertDialog'
 import Modal from '../../components/common/Modal'
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../services/categoryService'
 import { newIdempotencyKey } from '../../utils/idempotency'
@@ -74,6 +75,7 @@ function Categories() {
   const [showAdd, setShowAdd]       = useState(false)
   const [editing, setEditing]       = useState(null)
   const [deleting, setDeleting]     = useState(null)
+  const [blockedDelete, setBlockedDelete] = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -104,14 +106,18 @@ function Categories() {
   }
 
   const handleDelete = async () => {
+    const target = deleting
+    setDeleting(null)
     try {
-      await deleteCategory(deleting.id)
-      setCategories((prev) => prev.filter((c) => c.id !== deleting.id))
+      await deleteCategory(target.id)
+      setCategories((prev) => prev.filter((c) => c.id !== target.id))
       toast.show('Category deleted.', 'warning')
     } catch (err) {
-      toast.show(err.response?.data?.message || 'Failed to delete category.', 'error')
-    } finally {
-      setDeleting(null)
+      if (err.response?.status === 409) {
+        setBlockedDelete(err.response.data?.message || `"${target.categoryName}" has assets assigned to it and can't be deleted.`)
+      } else {
+        toast.show(err.response?.data?.message || 'Failed to delete category.', 'error')
+      }
     }
   }
 
@@ -211,6 +217,13 @@ function Categories() {
           confirmLabel="Delete Category"
           onConfirm={handleDelete}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+      {blockedDelete && (
+        <AlertDialog
+          title="Can't delete this category"
+          message={blockedDelete}
+          onClose={() => setBlockedDelete(null)}
         />
       )}
     </MainLayout>

@@ -21,7 +21,10 @@ class DashboardStats {
 
 final dashboardStatsProvider = FutureProvider.autoDispose<DashboardStats>((ref) async {
   final service = ref.watch(assetServiceProvider);
-  final assets = await service.getAll(size: 1000);
+  // Stats need the full dataset, not a page — matches web's assetService.js
+  // getAssets(), which requests size: 100000 for the same reason. A capped
+  // size here silently undercounts totalAssets once the table grows past it.
+  final assets = await service.getAll(size: 100000);
 
   final conditionDist = <String, int>{};
   final lifecycleDist = <String, int>{};

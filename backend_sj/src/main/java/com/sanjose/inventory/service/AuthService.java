@@ -146,6 +146,22 @@ public class AuthService {
         return Map.of("token", token, "user", userMap);
     }
 
+    // Backs GET /api/auth/me — same user-map shape as login()/forceChangePassword()
+    // (in particular, privacyAcknowledgedAt) so a client rehydrating its session
+    // from an existing cookie sees the same fields it would have gotten at login.
+    public Map<String, Object> getCurrentUserMap(String username) {
+        LoginUserData user = lookupForLogin(username);
+        if (user == null) return null;
+
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("id", user.id());
+        userMap.put("username", user.username());
+        userMap.put("fullName", user.fullName());
+        userMap.put("role", user.role());
+        userMap.put("privacyAcknowledgedAt", user.privacyAcknowledgedAt());
+        return userMap;
+    }
+
     private LoginUserData lookupForLogin(String identifier) {
         List<LoginUserData> rows = jdbcTemplate.query(
             "CALL sp_auth_get_user_for_login(?)",

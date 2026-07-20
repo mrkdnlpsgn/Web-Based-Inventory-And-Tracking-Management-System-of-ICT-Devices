@@ -1,5 +1,6 @@
 package com.sanjose.inventory.controller;
 
+import com.sanjose.inventory.dto.AssetImportRow;
 import com.sanjose.inventory.dto.AssetRequest;
 import com.sanjose.inventory.entity.Asset;
 import com.sanjose.inventory.service.AssetService;
@@ -52,6 +53,13 @@ public class AssetController {
 
     @PostMapping
     public Asset create(@RequestBody AssetRequest req) { return assetService.create(req); }
+
+    // Bulk create from a parsed spreadsheet (see AssetImportRow) — create-only,
+    // one bad row is reported as a failure rather than aborting the batch.
+    @PostMapping("/bulk-import")
+    public Map<String, Object> bulkImport(@RequestBody List<AssetImportRow> rows) {
+        return assetService.bulkImport(rows);
+    }
 
     @PutMapping("/{id}")
     public Asset update(@PathVariable Long id, @RequestBody AssetRequest req) {

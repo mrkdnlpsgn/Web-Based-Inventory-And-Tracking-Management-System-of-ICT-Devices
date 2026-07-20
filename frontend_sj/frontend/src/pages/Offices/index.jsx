@@ -4,6 +4,7 @@ import { useDebounce } from '../../hooks/useDebounce'
 import MainLayout from '../../components/layout/MainLayout'
 import Button from '../../components/common/Button'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import AlertDialog from '../../components/common/AlertDialog'
 import Modal from '../../components/common/Modal'
 import { getOffices, createOffice, updateOffice, deleteOffice } from '../../services/officeService'
 import { getUsers } from '../../services/userService'
@@ -88,6 +89,7 @@ function Offices() {
   const [showAdd, setShowAdd]   = useState(false)
   const [editing, setEditing]   = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [blockedDelete, setBlockedDelete] = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -118,14 +120,18 @@ function Offices() {
   }
 
   const handleDelete = async () => {
+    const target = deleting
+    setDeleting(null)
     try {
-      await deleteOffice(deleting.id)
-      setOffices((prev) => prev.filter((o) => o.id !== deleting.id))
+      await deleteOffice(target.id)
+      setOffices((prev) => prev.filter((o) => o.id !== target.id))
       toast.show('Office deleted.', 'warning')
     } catch (err) {
-      toast.show(err.response?.data?.message || 'Failed to delete office.', 'error')
-    } finally {
-      setDeleting(null)
+      if (err.response?.status === 409) {
+        setBlockedDelete(err.response.data?.message || `"${target.officeName}" has assets assigned to it and can't be deleted.`)
+      } else {
+        toast.show(err.response?.data?.message || 'Failed to delete office.', 'error')
+      }
     }
   }
 
@@ -225,6 +231,13 @@ function Offices() {
           confirmLabel="Delete Office"
           onConfirm={handleDelete}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+      {blockedDelete && (
+        <AlertDialog
+          title="Can't delete this office"
+          message={blockedDelete}
+          onClose={() => setBlockedDelete(null)}
         />
       )}
     </MainLayout>

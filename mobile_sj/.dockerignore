@@ -9,3 +9,4 @@ windows/
 web/
 *.iml
 .idea/
+*.apk

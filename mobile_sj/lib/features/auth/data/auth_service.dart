@@ -70,6 +70,17 @@ class AuthService {
     await ApiClient.instance.clearCookies();
   }
 
+  // POST /api/auth/acknowledge-privacy — records that the current user has
+  // reviewed the Privacy, Terms & Conditions. Returns the new timestamp.
+  Future<String> acknowledgePrivacy() async {
+    try {
+      final res = await _dio.post('/auth/acknowledge-privacy');
+      return res.data['privacyAcknowledgedAt'] as String;
+    } catch (e) {
+      throw ApiException.from(e);
+    }
+  }
+
   // POST /api/auth/forgot-password/request — step 1: emails a one-time code to the
   // account's registered address. Requiring possession of the inbox (not just the
   // username) is what prevents anyone who merely knows/guesses a username from

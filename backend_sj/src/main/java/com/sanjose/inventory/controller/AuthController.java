@@ -95,8 +95,9 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me(@AuthenticationPrincipal UserDetails principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(Map.of("username", principal.getUsername(),
-                                        "authorities", principal.getAuthorities()));
+        Map<String, Object> userMap = authService.getCurrentUserMap(principal.getUsername());
+        if (userMap == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(userMap);
     }
 
     @PostMapping("/acknowledge-privacy")

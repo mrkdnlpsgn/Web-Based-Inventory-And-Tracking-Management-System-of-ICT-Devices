@@ -37,4 +37,15 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     await _service.logout();
     state = const AsyncData(null);
   }
+
+  Future<void> acknowledgePrivacy() async {
+    final ackAt = await _service.acknowledgePrivacy();
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(UserModel(
+      username: current.username,
+      role: current.role,
+      privacyAcknowledgedAt: ackAt,
+    ));
+  }
 }
